@@ -1013,7 +1013,7 @@ samp {
 }
 .intro-header {
   background: no-repeat center center;
-  background-color: #cccccc;
+  background-color: #333;
   background-attachment: scroll;
   -webkit-background-size: cover;
   -moz-background-size: cover;
