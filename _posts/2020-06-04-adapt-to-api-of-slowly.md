@@ -226,7 +226,6 @@ Since we don't have any information before signing in, thus `uid` can always be 
 
 Combining all the code metioned above together, we get to a final, feasible piece of code:
 ```javascript
-
 const Encryption = (function() {
   ......
 })()
