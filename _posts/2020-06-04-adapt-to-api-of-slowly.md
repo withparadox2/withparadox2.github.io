@@ -10,7 +10,7 @@ tags:
 
 ## Background
 
-I wrote a web version of [Slowly](https://github.com/withparadox2/ShowSlowly) using Vue.js last year, which was supposed to provide some useful functions not supported, even now, by the official app. It runs well till yesterday when I failed to sign in my account. At first, I suspected the server might have detected what I had done was illegal and blocked me from further use, since my app can extract accurate locations of friends, show content of a letter even before it has arrived, and send photos without acceptances from receiver, which, to some extent, may violate their licences.  
+I wrote a web version of [Slowly](https://github.com/withparadox2/ShowSlowly) using Vue.js last year, which provided some useful functions unsupported, even now, by the official app. It runs well till yesterday when I failed to sign in. At first, I suspected the server might have detected what I had done was illegal and blocked me from further use, since my app can extract accurate locations of friends, show content of a letter even before it has arrived, and send photos without acceptances from receiver, which, to some extent, may violate their licences.  
 
 After some investigations, it turned out, luckily, that they just upgraded the sercurity level of server to protect information of users. I spent several hours studing their strategies and modifying my code and eventually made the app sail out again. 
 
@@ -222,7 +222,7 @@ __d(function(g, r, i, a, m, e, d) {
   e.getMyID = _;
 }, 963, [1, 18, 46, 964, 356, 919, 965]);
 ```
-Since we don't have any information before get login in, `uid` can always be set as `0`.
+Since we don't have any information before signing in, thus `uid` can always be set as `0`.
 
 Combining all the code metioned above together, we get to a final, feasible piece of code:
 ```javascript
