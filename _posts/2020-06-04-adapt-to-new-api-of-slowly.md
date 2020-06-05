@@ -31,9 +31,9 @@ P.S. Charles did help. A lot!
 
 ## Generate otp
 
-There was little I could do withought reading the code. So I downloaded the latest apk, unpacked it, and found the source file `index.android.bundle` directly under the folder `assets`, which turned out to be a large compressed javascript file with the size of nearly 3.5 Mb. I copied it to another file named `index.js`, opening it with VS Code. The messy code soon filled the screen and made my computer roar at it's best. 
+There was little I could do withought reading the code. So I downloaded the latest apk, unpacked it, and found the source file `index.android.bundle` directly under the folder `assets`, which turned out to be a large compressed JavaScript file with the size of nearly 3.5 Mb. I copied it to another file named `index.js`, opening it with VS Code. The messy code soon filled the screen and made my computer roar heavily. 
 
-![Code Overview](/img/post/2020-06-04-adapt-to-api-of-slowly/bundle_code_overview.png)
+![Code Overview](/img/post/2020-06-04-adapt-to-new-api-of-slowly/bundle_code_overview.png)
 
 I extracts a piece of code related to the new api `/users/me/v2`, and it's easy to find `otp` is passed from the caller side.
 
@@ -61,7 +61,7 @@ __d(function(g, r, i, a, m, e, d) {
   };
 }, 962, [1, 924, 598]);
 ```
-Code blocks referencing `getMe` are all surrounded with a large piece of messed code, which makes it difficult to figure out. Instead, I searched `otp` and found the core logic to generate `otp`: 
+Code blocks referencing `getMe` are all surrounded with a large piece of messed code, which makes it difficult to figure out what's going on. Instead, I searched `otp` and found the core logic to generate `otp`: 
 
 ```javascript
 __d(function(g, r, i, a, m, e, d) {
@@ -82,7 +82,7 @@ __d(function(g, r, i, a, m, e, d) {
 
 `genOTP` accepts an object containing two keys, one is `timestam`, another one is `uid`.
 
-Before going more, the structure of a module needs to be explainded a little. Each module is defined in a factory function passed along with another two parameters——an integer and an array——as arguments to a function `_d`. The second parameter, i.e. the integer, indicates the index of the module, and the third parameter is an array of index of module it depends on.
+Before going further, the structure of a module needs to be explainded a little. Each module is defined in a factory function passed along with another two parameters——an integer and an array——as arguments to a function `_d`. The second parameter, i.e. the integer, indicates the index of the module, and the third parameter is an array of index of module it depends on.
 
 ```javascript
 __d(function(g,r,i,a,m,e,d){
@@ -224,7 +224,7 @@ __d(function(g, r, i, a, m, e, d) {
 ```
 Since we don't have any information before signing in, thus `uid` can always be set as `0`.
 
-Combining all the code metioned above together, we get to a final, feasible piece of code:
+Combining all the code and optimizations metioned above together, we get to a final, feasible piece of code:
 ```javascript
 const Encryption = (function() {
   ......
