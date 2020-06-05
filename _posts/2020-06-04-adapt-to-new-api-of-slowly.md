@@ -95,7 +95,7 @@ Each factory function accepts 7 parameters, the most important three ones are:
 - e: exports, `e.getMe = function` means to export a function `getMe` from this module
 - d: array of dependencies, `r(d[1])` means to import a module whose index is `d[1]`
 
-In this case, `d` is `[1, 924, 925]`, then `t = r(d[0])` equals `t = r(1)` and `o = t(r(d[2]))` equals `o = r(1)(r(925))`, hence the code above can be transformed to something below:
+In this case, `d` is `[1, 924, 925]`, then `t = r(d[0])` equals `t = r(1)` and `o = t(r(d[2]))` equals `o = r(1)(r(925))`, hence the code above can be transformed into something below:
 
 ```javascript
 var otp = new (__r(1)(__r(925)).default)(
@@ -108,7 +108,7 @@ var otp = new (__r(1)(__r(925)).default)(
 )
 console.log(otp)
 ```
-Put this piece of code at the bottom of `index.js` and run `node index.js`. Supress some(a lot of) errors related to ReactNative and we will get an output, pretty much like the one capured in a request:
+Put this piece of code at the bottom of `index.js` and run `node index.js`. After supressing some(a lot of) errors related to ReactNative, we will get an output, pretty much looking like the one capured in a previous request:
 
 ```
 j4P89Am5g96GPkKwuYiZ5xE3wgbLYO
