@@ -10,7 +10,7 @@ tags:
 
 ## Background
 
-I wrote a web version of [Slowly](https://github.com/withparadox2/ShowSlowly) using Vue.js last year, which provided some useful functions unsupported, even now, by the official app. It runs well till yesterday when I failed to sign in. At first, I suspected the server might have detected what I had done was illegal and blocked me from further use, since my app can extract accurate locations of friends, show content of a letter even before it has arrived, and send photos without acceptances from receiver, which, to some extent, may violate their licences.  
+I wrote a web version of [Slowly](https://github.com/withparadox2/ShowSlowly) using Vue.js last year, which provided some useful functions unsupported, even now, by the official app. It ran well till yesterday when I failed to sign in. At first, I suspected the server might have detected what I had done was illegal and blocked me from further use, since my app can extract accurate locations of friends, show content of a letter even before it has arrived, and send photos without acceptances from receiver, which, to some extent, may violate their licences.  
 
 After some investigations, it turned out, luckily, that they just upgraded the sercurity level of server to protect information of users. I spent several hours studing their strategies and modifying my code and eventually made the app sail out again. 
 
@@ -20,7 +20,7 @@ This post elaborates on the problems I encountered during the process and how I 
 
 I created the first version with help of Charles to intercept requests sending from the Slowly app running in my phone with Android 7 installed. In this way, I was able to see the content sealed with https and recorded all important APIs and hence built my own version. In order to figure out what went wrong I had to check first the requests sending by the latest version of Slowly. However, installation of certificates is forbidden in Android with platform version above 7, so I turned to VirtualXposed, which promises a way to hack https in Android phones running on an OS of any version without root. It didn't work either. 
 
-Before digging into VirtualXposed I tried doing it on Windows instead. Though there were many problmes, like mismatch of architectures, missing of services from google play required by Slowly and my inability to separate a runnable apk from a bundle, I solved them patiently and finally intercepted requests in Charles. 
+Before digging into VirtualXposed I tried doing it on Windows instead. Although there were many problmes, like mismatch of architectures, missing of services from google play required by Slowly and my inability to separate a runnable apk from a bundle, I solved them patiently and finally intercepted requests in Charles. 
 
 It turned out that besides using a new API, the login request also brought an encrypted parameter of `otp`, changing each time, which obviously was generated in client. My next task was to find out how to generate `otp`.
 ```
@@ -31,7 +31,7 @@ P.S. Charles did help. A lot!
 
 ## Generate otp
 
-There was little I could do withought reading the code. So I downloaded the latest apk, unpacked it, and found the source file `index.android.bundle` directly under the folder `assets`, which turned out to be a large compressed JavaScript file with the size of nearly 3.5 Mb. I copied it to another file named `index.js`, opening it with VS Code. The messy code soon filled the screen and made my computer roar heavily. 
+There was little I could do withought reading the code. So I downloaded the latest apk, unpacked it, and found the source file `index.android.bundle` directly under the folder `assets`, which turned out to be a large compressed JavaScript file with the size of nearly 3.5 Mb. I copied it to another file named `index.js`, opening it with VS Code. The messy code soon filled the screen and made my computer roar heavily.
 
 ![Code Overview](/img/post/2020-06-04-adapt-to-new-api-of-slowly/bundle_code_overview.png)
 
@@ -222,7 +222,7 @@ __d(function(g, r, i, a, m, e, d) {
   e.getMyID = _;
 }, 963, [1, 18, 46, 964, 356, 919, 965]);
 ```
-Since we don't have any information before signing in, thus `uid` can always be set as `0`.
+Since we don't have any information before signing in, thus `uid` can always be set to `0`.
 
 Combining all the code and optimizations metioned above together, we get to a final, feasible piece of code:
 ```javascript
