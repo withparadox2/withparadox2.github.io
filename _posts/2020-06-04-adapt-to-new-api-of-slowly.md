@@ -10,15 +10,15 @@ tags:
 
 ## Background
 
-I wrote a web version of [Slowly](https://github.com/withparadox2/ShowSlowly) using Vue.js last year, which provided some useful functions unsupported, even now, by the official app. It ran well till yesterday when I failed to sign in. At first, I suspected the server might have detected what I had done was illegal and blocked me from further use, since my app can extract accurate locations of friends, show content of a letter even before it has arrived, and send photos without acceptances from receiver, which, to some extent, may violate their licences.  
+I wrote a web version of [Slowly](https://github.com/withparadox2/ShowSlowly) using Vue.js last year, which provided some useful functions unsupported, even now, by the official app. It ran well till yesterday when I failed to sign in. At first, I suspected the server might have detected what I had done was illegal and blocked me from further use, since my app can extract accurate locations of friends, show content of a letter even before it has arrived, and send photos without acceptances from a receiver, which, to some extent, may violate their licences.  
 
-After some investigations, it turned out, luckily, that they just upgraded the sercurity level of server to protect information of users. I spent several hours studing their strategies and modifying my code and eventually made the app sail out again. 
+After some investigations, it turned out, luckily, that they just upgraded the sercurity level of servers to protect information of users. I spent several hours studing their strategies and modifying my code and eventually made the app sail out again. 
 
-This post elaborates on the problems I encountered during the process and how I finally solve them.
+This post elaborates on the problems I encountered during the process and how I finally solved them.
 
 ## Charles didn't help
 
-I created the first version with help of Charles to intercept requests sending from the Slowly app running in my phone with Android 7 installed. In this way, I was able to see the content sealed with https and recorded all important APIs and hence built my own version. In order to figure out what went wrong I had to check first the requests sending by the latest version of Slowly. However, installation of certificates is forbidden in Android with platform version above 7, so I turned to VirtualXposed, which promises a way to hack https in Android phones running on an OS of any version without root. It didn't work either. 
+I created the first version with help of Charles to intercept requests sent from the Slowly app running in my phone with Android 7 installed. In this way, I was able to see the content sealed with https and record all important APIs and hence build my own version. In order to figure out what went wrong I had to check first the requests sent by the latest version of Slowly. However, installation of certificates is forbidden on Android with platform version above 7, so I turned to VirtualXposed, which promises a way to hack https in Android phones running on an OS of any version without root. It didn't work either. 
 
 Before digging into VirtualXposed I tried doing it on Windows instead. Although there were many problmes, like mismatch of architectures, missing of services from google play required by Slowly and my inability to separate a runnable apk from a bundle, I solved them patiently and finally intercepted requests in Charles. 
 
