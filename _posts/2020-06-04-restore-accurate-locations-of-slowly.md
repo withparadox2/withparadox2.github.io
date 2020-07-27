@@ -18,7 +18,7 @@ The thought of restoring the accurate location is to send requests and collect a
 
 To know the exact location and do the comparison, I created another account and sent a letter to my main account. It's quite easy to extract the accurate location of yourself.
 
-After signing in my main account, I could see a letter from the newly created account was arriving. I modified some code to loop requests for 5000 times and wrote these location data to a text file with one location in a row.
+After signing in my main account, I could see a letter from the newly created account was arriving. I modified some code to send requests repeatedly for 5000 times and wrote these location data to a text file with one location in a row.
 
 ![Locations](/img/post/2020-07-27-restore-accurate-locations-of-slowly/Locations.png)
 
