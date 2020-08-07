@@ -5,7 +5,7 @@ date: 2020-07-27
 author: 'withparadox2'
 catalog: true
 tags:
-  - javascript
+  - Slowly
 ---
 
 ## Background

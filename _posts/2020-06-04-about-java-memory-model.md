@@ -5,7 +5,7 @@ date:       2020-06-04
 author:     "withparadox2"
 catalog: true
 tags:
-  - java
+  - Java
 mathjax: true  
 ---
 
