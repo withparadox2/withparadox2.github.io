@@ -1010,4 +1010,781 @@ retry:
 ```
 当在wait_event_interruptible_exclusive阻塞等待唤醒时，驱动已经往read_buffer里面写入一个整数BR_NOOP。
 
-# 2 
+# 2 注册ActivityManagerService
+
+Zygote进程会创建SystemServer进程并调用SystemServer.main方法。下面从main方法开始看。
+
+## 2.1 addService
+```java
+// frameworks/base/services/java/com/android/server/SystemServer.java
+public static void main(String[] args) {
+  new SystemServer().run();
+}
+
+private void run() {
+  ...
+  try {
+      startBootstrapServices();
+      ...
+  } catch (Throwable ex) {
+      ...
+  }
+  ...
+}
+
+private void startBootstrapServices() {
+  ...
+  mActivityManagerService = mSystemServiceManager
+    .startService(ActivityManagerService.Lifecycle.class)
+    .getService();
+  ...
+  mActivityManagerService.setSystemProcess();
+  ...
+}
+```
+```java
+// frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+public void setSystemProcess() {
+  try {
+    ServiceManager.addService(Context.ACTIVITY_SERVICE, this, true);
+    ...
+  } catch (PackageManager.NameNotFoundException e) {
+    ...
+  }
+}
+```
+```java
+// frameworks/base/core/java/android/os/ServiceManager.java
+// name = "activity"
+// service = ActivityManagerService对象
+// allowIsolated = true
+public static void addService(String name, IBinder service, boolean allowIsolated) {
+  try {
+    // addService 见2.1.2
+    getIServiceManager().addService(name, service, allowIsolated);
+  } catch (RemoteException e) {
+    Log.e(TAG, "error in addService", e);
+  }
+}
+
+private static IServiceManager getIServiceManager() {
+  if (sServiceManager != null) {
+    return sServiceManager;
+  }
+
+  // Find the service manager
+  sServiceManager = ServiceManagerNative.asInterface(BinderInternal.getContextObject());
+  return sServiceManager;
+}
+```
+```java
+// frameworks/base/core/java/android/os/ServiceManagerNative.java
+static final String descriptor = "android.os.IServiceManager";
+
+static public IServiceManager asInterface(IBinder obj) {
+  if (obj == null) {
+    return null;
+  }
+  IServiceManager in =
+    (IServiceManager)obj.queryLocalInterface(descriptor);
+  if (in != null) {
+    return in;
+  }
+  
+  return new ServiceManagerProxy(obj);
+}
+```
+BinderInternal.getContextObject()是一个native方法，通过它得到一个IBinder对象。这里obj是一个BinderProxy对象，queryLocalInterface返回为null，因此我们得到的是一个ServiceManagerProxy对象。
+
+下面看下如果获得IBinder对象。
+
+### 2.1.1 BinderInternal.getContextObject
+```c++
+// android_util_binder.cpp
+static jobject android_os_BinderInternal_getContextObject(JNIEnv* env, jobject clazz)
+{
+   // 见2.1.1.1
+    sp<IBinder> b = ProcessState::self()->getContextObject(NULL);
+  // 见2.1.1.2
+    return javaObjectForIBinder(env, b);
+}
+```
+
+#### 2.1.1.1 ProcessState::self
+```c++
+// ProcessState.cpp
+sp<ProcessState> ProcessState::self()
+{
+    Mutex::Autolock _l(gProcessMutex);
+    if (gProcess != NULL) {
+        return gProcess;
+    }
+    gProcess = new ProcessState;
+    return gProcess;
+}
+```
+gProcess是一个单例，在初始化时会调用open_driver()打开binder驱动，并将文件符保存至mDriverFD字段中。下面看下getContextObject的实现。
+
+```c++
+// ProcessState.cpp
+sp<IBinder> ProcessState::getContextObject(const sp<IBinder>& /*caller*/)
+{
+  return getStrongProxyForHandle(0);
+}
+
+// handle = 0
+sp<IBinder> ProcessState::getStrongProxyForHandle(int32_t handle)
+{
+  sp<IBinder> result;
+
+  AutoMutex _l(mLock);
+
+  // 根据handle在一个vector中查找，找不到则创建一个handle_entry，字段为null
+  handle_entry* e = lookupHandleLocked(handle);
+
+  if (e != NULL) {
+    // b 为 NULL
+    IBinder* b = e->binder;
+    if (b == NULL || !e->refs->attemptIncWeak(this)) {
+      if (handle == 0) {
+        // 检测context manager是否已经注册
+        Parcel data;
+        status_t status = IPCThreadState::self()->transact(
+            0, IBinder::PING_TRANSACTION, data, NULL, 0);
+        if (status == DEAD_OBJECT)
+          return NULL;
+      }
+
+      b = new BpBinder(handle); 
+      e->binder = b;
+      if (b) e->refs = b->getWeakRefs();
+      result = b;
+    } else {
+      // This little bit of nastyness is to allow us to add a primary
+      // reference to the remote proxy when this team doesn't have one
+      // but another team is sending the handle to us.
+      result.force_set(b);
+      e->refs->decWeak(this);
+    }
+  }
+
+  return result;
+}
+```
+getContextObject返回的是一个构造参数为0的BpBinder对象。
+
+#### 2.1.1.2 javaObjectForIBinder
+```c++
+// android_util_Binder.cpp
+// val = new BpBinder(0)
+jobject javaObjectForIBinder(JNIEnv* env, const sp<IBinder>& val)
+{
+  if (val == NULL) return NULL;
+
+  // 检测是否为android.os.Binder的子类
+  if (val->checkSubclass(&gBinderOffsets)) {
+    jobject object = static_cast<JavaBBinder*>(val.get())->object();
+    return object;
+  }
+
+  // For the rest of the function we will hold this lock, to serialize
+  // looking/creation of Java proxies for native Binder proxies.
+  AutoMutex _l(mProxyLock);
+
+  // Someone else's...  do we know about it?
+  // BpBinder是个纯C++对象，肯定不走这里
+  jobject object = (jobject)val->findObject(&gBinderProxyOffsets);
+  if (object != NULL) {
+    ...
+  }
+
+  // 创建一个android.os.BinderProxy的Java对象
+  object = env->NewObject(gBinderProxyOffsets.mClass, gBinderProxyOffsets.mConstructor);
+  if (object != NULL) {
+    LOGDEATH("objectForBinder %p: created new proxy %p !\n", val.get(), object);
+    // 将BpBinder的地址赋给BinderProxy的mObject字段
+    env->SetLongField(object, gBinderProxyOffsets.mObject, (jlong)val.get());
+    val->incStrong((void*)javaObjectForIBinder);
+
+    // The native object needs to hold a weak reference back to the
+    // proxy, so we can retrieve the same proxy if it is still active.
+    jobject refObject = env->NewGlobalRef(
+        env->GetObjectField(object, gBinderProxyOffsets.mSelf));
+    val->attachObject(&gBinderProxyOffsets, refObject,
+        jnienv_to_javavm(env), proxy_cleanup);
+
+    // Also remember the death recipients registered on this proxy
+    sp<DeathRecipientList> drl = new DeathRecipientList;
+    drl->incStrong((void*)javaObjectForIBinder);
+    env->SetLongField(object, gBinderProxyOffsets.mOrgue, reinterpret_cast<jlong>(drl.get()));
+
+    // Note that a new object reference has been created.
+    android_atomic_inc(&gNumProxyRefs);
+    incRefsCreated(env);
+  }
+
+  // BinderProxy对象
+  return object;
+}
+```
+### 2.1.2 ServiceManagerProxy#addService
+```java
+// frameworks/base/core/java/android/os/ServiceManagerNative.java
+// name = "activity"
+// service = ActivityManagerService对象
+// allowIsolated = true
+public void addService(String name, IBinder service, boolean allowIsolated)
+      throws RemoteException {
+  // 见2.1.3  
+  Parcel data = Parcel.obtain();
+  Parcel reply = Parcel.obtain();
+  // 见2.1.4
+  data.writeInterfaceToken(IServiceManager.descriptor);
+  data.writeString(name);
+  data.writeStrongBinder(service);
+  data.writeInt(allowIsolated ? 1 : 0);
+  // 见2.1.5
+  mRemote.transact(ADD_SERVICE_TRANSACTION, data, reply, 0);
+  reply.recycle();
+  data.recycle();
+}
+```
+这里的mRemote便为构造ServiceManagerProxy时传入的BinderProxy对象，它的mObject字段指向一个BpBinder的C++对象，该BpBinder对象的handle为0。
+
+往data中写入的内容包括：
+字符串："android.os.IServiceManager"
+字符串："activity",
+flat_binder_object结构体: 
+```
+{
+ flags: 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS,
+ type: BINDER_TYPE_BINDER,
+ binder: 弱引用,
+ cookie: 指向Binder对象指针,
+}
+```
+整数：1
+
+### 2.1.3 Parcel.obtain
+```java
+// Parcel.java
+public static Parcel obtain() {
+  final Parcel[] pool = sOwnedPool;
+  synchronized (pool) {
+    Parcel p;
+    for (int i=0; i<POOL_SIZE; i++) {
+      p = pool[i];
+      if (p != null) {
+        pool[i] = null;
+        if (DEBUG_RECYCLE) {
+          p.mStack = new RuntimeException();
+        }
+        return p;
+      }
+    }
+  }
+  return new Parcel(0);
+}
+
+private Parcel(long nativePtr) {
+  init(nativePtr);
+}
+
+private void init(long nativePtr) {
+  if (nativePtr != 0) {
+    mNativePtr = nativePtr;
+    mOwnsNativeParcelObject = false;
+  } else {
+    mNativePtr = nativeCreate();
+    mOwnsNativeParcelObject = true;
+  }
+}
+```
+obtain()会先从缓存池中获取Parcel，如果没有则新创建一个Parcel对象，传入参数为0，接下来调用native方法nativeCreate来创建一个native对象，并将对象指针保存到mNativePtr中。
+
+```c++
+// android_os_Parcel.cpp
+static jlong android_os_Parcel_create(JNIEnv* env, jclass clazz)
+{
+    Parcel* parcel = new Parcel();
+    return reinterpret_cast<jlong>(parcel);
+}
+```
+### 2.1.4 向Parcel写入数据
+```java
+// Parcel.java
+// interfaceName = "android.os.IServiceManager"
+public final void writeInterfaceToken(String interfaceName) {
+  nativeWriteInterfaceToken(mNativePtr, interfaceName);
+}
+```
+调用native方法。
+```c++
+// android_os_Parcel.cpp
+// name = "android.os.IServiceManager"
+static void android_os_Parcel_writeInterfaceToken(JNIEnv* env, jclass clazz, jlong nativePtr, jstring name){
+  Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
+  if (parcel != NULL) {
+    // In the current implementation, the token is just the serialized interface name that
+    // the caller expects to be invoking
+    const jchar* str = env->GetStringCritical(name, 0);
+    if (str != NULL) {
+      parcel->writeInterfaceToken(String16(
+         reinterpret_cast<const char16_t*>(str),
+         env->GetStringLength(name)));
+      env->ReleaseStringCritical(name, str);
+    }
+  }
+ }
+```
+```c++
+// Parcel.cpp
+// interface = "android.os.IServiceManager"
+status_t Parcel::writeInterfaceToken(const String16& interface)
+{
+  // 写入一个整数标识严格模式 
+  writeInt32(IPCThreadState::self()->getStrictModePolicy() |
+        STRICT_MODE_PENALTY_GATHER);
+  // 写入传入的字符串
+  return writeString16(interface);
+}
+```
+写入字符串时首先写入字符串长度，接着写入字符串内容，最后再写入一个整数0。
+
+data.writeString(name)和data.writeInt(allowIsolated ? 1 : 0)与writeInterfaceToken类似，不做分析，下面看看data.writeStrongBinder：
+
+```c++
+// android_os_Parcel.cpp
+// object = ActivityManagerService对象
+static void android_os_Parcel_writeStrongBinder(JNIEnv* env, jclass clazz, jlong nativePtr, jobject object)
+{
+  Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
+  if (parcel != NULL) {
+  // ibinderForJavaObject 见2.1.4.1
+  // writeStrongBinder 见2.1.4.2
+    const status_t err = parcel->writeStrongBinder(ibinderForJavaObject(env, object));
+    if (err != NO_ERROR) {
+      signalExceptionForError(env, clazz, err);
+    }
+  }
+}
+```
+
+#### 2.1.4.1 ibinderForJavaObject
+```c++
+// android_os_Parcel.cpp
+// obj = ActivityManagerService对象
+sp<IBinder> ibinderForJavaObject(JNIEnv* env, jobject obj)
+{
+  if (obj == NULL) return NULL;
+
+  // 由于ActivityManagerService继承Binder对象，进入该分支
+  if (env->IsInstanceOf(obj, gBinderOffsets.mClass)) {
+     // Java端的Binder对象会持有一个mObject字段，指向
+    // native端的JavaBBinderHolder对象，见2.1.4.1.1
+    JavaBBinderHolder* jbh = (JavaBBinderHolder*)
+      env->GetLongField(obj, gBinderOffsets.mObject);
+    // 见2.1.4.1.2
+    return jbh != NULL ? jbh->get(env, obj) : NULL;
+  }
+
+  // 对于非服务类，则继承BinderProxy，前面已经讲过
+  if (env->IsInstanceOf(obj, gBinderProxyOffsets.mClass)) {
+    return (IBinder*)
+      env->GetLongField(obj, gBinderProxyOffsets.mObject);
+  }
+
+  ALOGW("ibinderForJavaObject: %p is not a Binder object", obj);
+  return NULL;
+}
+```
+最终返回一个JavaBBinder对象，其mObject字段引用ActivityManagerService对象。
+
+##### 2.1.4.1.1 android_os_Binder_init
+Java端Binder类的构造方法会调用一个native方法init，在该native方法中会创建一个JavaBBinderHolder的native对象，并将其地址赋给Java对象的mObject字段。
+```c++
+// android_util_Binder.cpp
+static void android_os_Binder_init(JNIEnv* env, jobject obj)
+{
+  JavaBBinderHolder* jbh = new JavaBBinderHolder();
+  if (jbh == NULL) {
+    jniThrowException(env, "java/lang/OutOfMemoryError", NULL);
+    return;
+  }
+  ALOGV("Java Binder %p: acquiring first ref on holder %p", obj, jbh);
+  jbh->incStrong((void*)android_os_Binder_init);
+  env->SetLongField(obj, gBinderOffsets.mObject, (jlong)jbh);
+}
+```
+##### 2.1.4.1.2 JavaBBinderHolder#get
+```c++ 
+// android_util_Binder.cpp#JavaBBinderHolder
+
+wp<JavaBBinder> mBinder;
+
+// obj = ActivityManagerService对象
+sp<JavaBBinder> get(JNIEnv* env, jobject obj)
+{
+  AutoMutex _l(mLock);
+  // mBinder是一个弱引用，第一次调用返回NULL
+  sp<JavaBBinder> b = mBinder.promote();
+  if (b == NULL) {
+    b = new JavaBBinder(env, obj);
+    mBinder = b;
+  }
+
+  return b;
+}
+```
+这里创建一个JavaBBinder对象，保存ActivityManagerService对象到mObject字段中。
+
+#### 2.1.4.2 Parcel#writeStrongBinder
+```c++
+// Parcel.cpp
+// val = JavaBBinder对象
+status_t Parcel::writeStrongBinder(const sp<IBinder>& val)
+{
+ // 见2.1.4.2.1
+  return flatten_binder(ProcessState::self(), val, this);
+}
+```
+##### 2.1.4.2.1 Parcel#flatten_binder
+```c++
+// Parcel.cpp
+// binder = JavaBBinder对象
+status_t flatten_binder(const sp<ProcessState>& /*proc*/,
+    const sp<IBinder>& binder, Parcel* out)
+{
+  flat_binder_object obj;
+
+  obj.flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
+  if (binder != NULL) {
+    // JavaBBinder继承BBinder，所以localBinder返回自身
+    IBinder *local = binder->localBinder();
+    if (!local) {
+      BpBinder *proxy = binder->remoteBinder();
+      if (proxy == NULL) {
+        ALOGE("null proxy");
+      }
+      const int32_t handle = proxy ? proxy->handle() : 0;
+      obj.type = BINDER_TYPE_HANDLE;
+      obj.binder = 0; /* Don't pass uninitialized stack data to a remote process */
+      obj.handle = handle;
+      obj.cookie = 0;
+    } else {
+      // 走这里   
+      obj.type = BINDER_TYPE_BINDER;
+      obj.binder = reinterpret_cast<uintptr_t>(local->getWeakRefs());
+      obj.cookie = reinterpret_cast<uintptr_t>(local);
+    }
+  } else {
+    obj.type = BINDER_TYPE_BINDER;
+    obj.binder = 0;
+    obj.cookie = 0;
+  }
+
+  return finish_flatten_binder(binder, obj, out);
+}
+
+inline static status_t finish_flatten_binder(
+    const sp<IBinder>& /*binder*/, const flat_binder_object& flat, Parcel* out)
+{
+  return out->writeObject(flat, false);
+}
+```
+如果binder是BBinder，那么它标识的服务提供方，obj.cookie保存的是指向该binder的实际指针；如果binder是Bpinder，那么它标识的服务使用方，obj.handle保存的实际Binder在驱动中的一个引用。
+```c++
+// Parcel.cpp
+/*
+val = {
+ flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS,
+ type: BINDER_TYPE_BINDER,
+ binder: 弱引用,
+ cookie: 指向Binder对象指针,
+}
+nullMetaData = false
+*/
+status_t Parcel::writeObject(const flat_binder_object& val, bool nullMetaData)
+{
+  const bool enoughData = (mDataPos+sizeof(val)) <= mDataCapacity;
+  const bool enoughObjects = mObjectsSize < mObjectsCapacity;
+  if (enoughData && enoughObjects) {
+ restart_write:
+    *reinterpret_cast<flat_binder_object*>(mData+mDataPos) = val;
+    ...
+    if (nullMetaData || val.binder != 0) {
+      // 记录flat_binder_object的在buffer中的位置
+      mObjects[mObjectsSize] = mDataPos;
+      acquire_object(ProcessState::self(), val, this, &mOpenAshmemSize);
+      mObjectsSize++;
+    }
+
+    return finishWrite(sizeof(flat_binder_object));
+  }
+
+  if (!enoughData) {
+  ...
+  }
+  if (!enoughObjects) {
+  ...
+  }
+
+  goto restart_write;
+}
+```
+如果空间不够则增大空间，并将val写入到Parcel中，同时记录了val在buffer中的位置，后面在binder驱动中会进行修改。
+
+### 2.1.5 BinderProxy#transact
+```java
+// Binder.java
+// code = IServiceManager.ADD_SERVICE_TRANSACTION
+// data = 见2.1.3注释
+// flags = 0
+public boolean transact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
+  Binder.checkParcel(this, code, data, "Unreasonably large binder buffer");
+  return transactNative(code, data, reply, flags);
+}
+```
+#### 2.1.5.1 transactNative
+```c++
+// android_util_Binder.cpp
+// code =  IServiceManager.ADD_SERVICE_TRANSACTION
+// dataObj = 写入的Parcel，见2.1.3注释
+// flags = 0
+static jboolean android_os_BinderProxy_transact(JNIEnv* env, jobject obj,
+        jint code, jobject dataObj, jobject replyObj, jint flags) // throws RemoteException
+{
+  if (dataObj == NULL) {
+    jniThrowNullPointerException(env, NULL);
+    return JNI_FALSE;
+  }
+  // 从Java对象中取出native对象
+  Parcel* data = parcelForJavaObject(env, dataObj);
+  if (data == NULL) {
+    return JNI_FALSE;
+  }
+  Parcel* reply = parcelForJavaObject(env, replyObj);
+  if (reply == NULL && replyObj != NULL) {
+    return JNI_FALSE;
+  }
+  
+ // mObject = BpBinder(0)
+  IBinder* target = (IBinder*)
+    env->GetLongField(obj, gBinderProxyOffsets.mObject);
+  if (target == NULL) {
+    jniThrowException(env, "java/lang/IllegalStateException", "Binder has been finalized!");
+    return JNI_FALSE;
+  }
+  ...
+ // 见2.1.5.2
+  status_t err = target->transact(code, *data, reply, flags);
+  ...
+  if (err == NO_ERROR) {
+    return JNI_TRUE;
+  } else if (err == UNKNOWN_TRANSACTION) {
+    return JNI_FALSE;
+  }
+
+  signalExceptionForError(env, obj, err, true /*canThrowRemoteException*/, data->dataSize());
+  return JNI_FALSE;
+}
+```
+#### 2.1.5.2 BpBinder#transact
+```c++
+// BpBinder.cpp
+// code =  IServiceManager.ADD_SERVICE_TRANSACTION
+// data = 写入的Parcel，见2.1.3注释
+// reply = 待写入的Parcel
+// flags = 0
+status_t BpBinder::transact(
+    uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
+{
+  if (mAlive) {
+  // 见2.2
+    status_t status = IPCThreadState::self()->transact(
+      mHandle, code, data, reply, flags);
+    if (status == DEAD_OBJECT) mAlive = 0;
+    return status;
+  }
+
+  return DEAD_OBJECT;
+}
+```
+IPCThreadState为每个线程维护了一个实例，通过IPCThreadState::self()获取。在IPCThreadState初始化时，会将ProcessState的进程单例保存到mProcess字段中。
+
+## 2.2 IPCThreadState#transact
+```c++
+// IPCThreadState.cpp
+// handle = 0
+// code =  IServiceManager.ADD_SERVICE_TRANSACTION
+// data = 写入的Parcel，见2.1.3注释
+// reply = 待写入的Parcel
+// flags = 0
+status_t IPCThreadState::transact(int32_t handle,
+                                  uint32_t code, const Parcel& data,
+                                  Parcel* reply, uint32_t flags)
+{
+  flags |= TF_ACCEPT_FDS;
+ if (err == NO_ERROR) {
+    // 见2.2.1
+    err = writeTransactionData(BC_TRANSACTION, flags, handle, code, data, NULL);
+ } 
+  ...
+ // 不是非阻塞模式，进入该分支
+  if ((flags & TF_ONE_WAY) == 0) {
+    // reply不为NULL
+    if (reply) {
+      // 见2.2.2   
+      err = waitForResponse(reply);
+    } else {
+      Parcel fakeReply;
+      err = waitForResponse(&fakeReply);
+    }
+    ...
+  } else {
+    err = waitForResponse(NULL, NULL);
+  }
+  
+  return err;
+}
+```
+### 2.2.1 writeTransactionData
+```c++
+// IPCThreadState.cpp
+// cmd = BC_TRANSACTION
+// binderFlags = TF_ACCEPT_FDS
+// handle = 0
+// code = IServiceManager.ADD_SERVICE_TRANSACTION
+// data = 写入的Parcel，见2.1.3注释
+// statusBuffer = null
+status_t IPCThreadState::writeTransactionData(int32_t cmd, uint32_t binderFlags,
+    int32_t handle, uint32_t code, const Parcel& data, status_t* statusBuffer)
+{
+  binder_transaction_data tr;
+
+  tr.target.ptr = 0; /* Don't pass uninitialized stack data to a remote process */
+  tr.target.handle = handle;
+  tr.code = code;
+  tr.flags = binderFlags;
+  tr.cookie = 0;
+  tr.sender_pid = 0;
+  tr.sender_euid = 0;
+  
+  const status_t err = data.errorCheck();
+  // 走该分支
+  if (err == NO_ERROR) {
+    tr.data_size = data.ipcDataSize();
+    tr.data.ptr.buffer = data.ipcData();
+    // 存储binder对象位置的数组字节大小
+    tr.offsets_size = data.ipcObjectsCount()*sizeof(binder_size_t);
+  // binder对象的对象位置的数组
+    tr.data.ptr.offsets = data.ipcObjects();
+  } else if (statusBuffer) {
+    tr.flags |= TF_STATUS_CODE;
+    *statusBuffer = err;
+    tr.data_size = sizeof(status_t);
+    tr.data.ptr.buffer = reinterpret_cast<uintptr_t>(statusBuffer);
+    tr.offsets_size = 0;
+    tr.data.ptr.offsets = 0;
+  } else {
+    return (mLastError = err);
+  }
+  // mOut是发给binder驱动的数据  
+  mOut.writeInt32(cmd);
+  mOut.write(&tr, sizeof(tr));
+  
+  return NO_ERROR;
+ }
+```
+### 2.2.2 waitForResponse
+```c++
+// IPCThreadState.cpp
+status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
+{
+  uint32_t cmd;
+  int32_t err;
+
+  while (1) {
+  // 见2.2.3
+    if ((err=talkWithDriver()) < NO_ERROR) break;
+    if (mIn.dataAvail() == 0) continue;
+    cmd = (uint32_t)mIn.readInt32();
+    switch (cmd) {
+   ...
+    }
+  }
+ ...
+  return err;
+}
+```
+执行过程为调用talkWithDriver，向驱动发送数据，然后读取驱动写入的数据，根据cmd进行操作。这里暂时忽略掉其他代码。
+
+### 2.2.3 talkWithDriver
+```c++
+// IPCThreadState.cpp
+// doReceive = true
+status_t IPCThreadState::talkWithDriver(bool doReceive)
+{
+  // mProcess即为ProcessState
+  if (mProcess->mDriverFD <= 0) {
+    return -EBADF;
+  }
+  
+  binder_write_read bwr;
+  
+  // Is the read buffer empty?
+	// 如果为true说明驱动写入的数据已经读取完了，或者根本就没数据
+	// 当前情况为true
+  const bool needRead = mIn.dataPosition() >= mIn.dataSize();
+  
+	// outAvail = mOut.dataSize()
+  const size_t outAvail = (!doReceive || needRead) ? mOut.dataSize() : 0;
+  
+  bwr.write_size = outAvail;
+  bwr.write_buffer = (uintptr_t)mOut.data();
+
+  // This is what we'll read.
+  if (doReceive && needRead) {
+    bwr.read_size = mIn.dataCapacity();
+    bwr.read_buffer = (uintptr_t)mIn.data();
+  } else {
+    bwr.read_size = 0;
+    bwr.read_buffer = 0;
+  }
+  
+  // Return immediately if there is nothing to do.
+  if ((bwr.write_size == 0) && (bwr.read_size == 0)) return NO_ERROR;
+
+  bwr.write_consumed = 0;
+  bwr.read_consumed = 0;
+  status_t err;
+  do {
+		// 见2.2.4
+    if (ioctl(mProcess->mDriverFD, BINDER_WRITE_READ, &bwr) >= 0)
+      err = NO_ERROR;
+    else
+      err = -errno;
+    ...
+  } while (err == -EINTR);
+
+  if (err >= NO_ERROR) {
+    if (bwr.write_consumed > 0) {
+      if (bwr.write_consumed < mOut.dataSize())
+        mOut.remove(0, bwr.write_consumed);
+      else
+        mOut.setDataSize(0);
+    }
+    if (bwr.read_consumed > 0) {
+      mIn.setDataSize(bwr.read_consumed);
+      mIn.setDataPosition(0);
+    }
+    return NO_ERROR;
+  }
+  
+  return err;
+}
+```
+
+
+在Java中，IBinder是基础接口，Binder和BinderProxy都继承IBinder。服务提供着需要继承Binder，例如ActivityManagerService。而服务调用者则包含一个BinderProxy对象，例如ActivityManagerProxy。服务提供者和服务调用者都需要实现业务接口，二者皆实现IActivityManager。
+
