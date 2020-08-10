@@ -10,7 +10,7 @@ Jekyll Theme: [Hux](https://github.com/Huxpro/huxpro.github.io)
 
 # License
 
-The content of the site (blog posts, presentation slides, etc.) are licensed as [Creative Commons CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode).
+The content of the site are licensed as [Creative Commons CC BY 4.0](https://creativecommons.org/licenses/by/4.0/legalcode).
 
 The code powering the site is licensed as:
 
