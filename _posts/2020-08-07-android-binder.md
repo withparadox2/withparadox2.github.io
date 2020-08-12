@@ -53,7 +53,7 @@ static int __init binder_init(void)
 device_initcall(binder_init);
 MODULE_LICENSE("GPL v2");
 ```
-当内核加载驱动时便会执行`device_initcall`所传入的方法`binder_init`进行初始化。在该方法中最重要的一步便是调用`mis_register`进行注册，而且`binder_miscdev`也指定了设备的名字为`binder`以及一个包含文件操作方法的结构体`binder_fops`。后面用户便可以通过系统调用如`open`, `ioctl`打开并与驱动进行交互了。
+当内核加载驱动时便会执行device_initcall所传入的方法（binder_init）进行初始化。在该方法中最重要的一步便是调用mis_register进行注册，而且binder_miscdev也指定了设备的名字为binder以及一个包含文件操作方法的结构体binder_fops。后面用户便可以通过系统调用如open, ioctl打开并与驱动进行交互了。
 
 ## 1.2 main
 ```c
@@ -162,7 +162,7 @@ static int binder_open(struct inode *nodp, struct file *filp)
 ```
 每个进程在与驱动交互之前都会进行open和mmap操作，binder驱动会在内核为其创建一个proc对象，并进行初始化，之后会将proc对象记录在binder_procs这个列表里。filp为file pointer，在调用open之前，内核会将filp->private_data置为NULL，该字段可以用来保存数据，以便在后面取出。
 
-其中`proc->todo`用来保存待处理的任务，`proc->wait`则用来进行休眠。当没有任务时服务提供者就会休眠，等待其他线程调用`wake_up_interruptible(wait)`来唤醒。后面还将出现thread对象，它也包含`todo`和`wait`两个变量。
+其中proc->todo用来保存待处理的任务，proc->wait则用来进行休眠。当没有任务时服务提供者就会休眠，等待其他线程调用wake_up_interruptible(wait)来唤醒。后面还将出现thread对象，它也包含todo和wait两个变量。
 
 ### 1.3.2 ioctl (获取binder版本)
 ```c
