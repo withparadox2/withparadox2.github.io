@@ -1192,7 +1192,7 @@ jobject javaObjectForIBinder(JNIEnv* env, const sp<IBinder>& val)
   AutoMutex _l(mProxyLock);
 
   // Someone else's...  do we know about it?
-  // BpBinder是个纯C++对象，肯定不走这里
+  // BpBinder是刚刚创建的C++对象，不走这里，下一次就会走这里
   jobject object = (jobject)val->findObject(&gBinderProxyOffsets);
   if (object != NULL) {
     ...
@@ -3148,7 +3148,7 @@ void IPCThreadState::freeBuffer(Parcel* parcel, const uint8_t* data,
 
 ## 2.6 总结
 
-现在来看一下调用流程：
+### 2.6.1 调用流程
 
 调用方发起BC_TRANSACTION，将事务放到线程事务栈栈顶，并在线程todo中添加一个类型为BINDER_WORK_TRANSACTION_COMPLETE的任务，同时在目标线程（没有指定线程，便唤醒proc->wait，也即主线程）todo中添加一个类型为BINDER_WORK_TRANSACTION的任务，并唤醒目标线程。调用方然后开始read流程，处理并清除线程中的todo任务（BINDER_WORK_TRANSACTION_COMPLETE），返回命令BR_TRANSACTION_COMPLETE，然后重新进入read，阻塞，等待唤醒。
 
@@ -3156,7 +3156,7 @@ void IPCThreadState::freeBuffer(Parcel* parcel, const uint8_t* data,
 
 调用方线程被唤醒后，处理并清除todo中的任务（BINDER_WORK_TRANSACTION），返回命令BR_REPLY，接着一路返回。
 
-关于Binder：
+### 2.6.2 关于Binder
 
 在Java中，IBinder是基础接口，Binder和BinderProxy都继承IBinder。服务提供着需要继承Binder，例如ActivityManagerService。而服务调用者则包含一个BinderProxy对象，例如ActivityManagerProxy。服务提供者和服务调用者都需要实现业务接口，二者皆实现IActivityManager。简化的代码如下：
 ```java
@@ -3252,3 +3252,290 @@ static public IActivityManager asInterface(IBinder obj) {
   return new ActivityManagerProxy(obj);
 }
 ```
+
+# 3 startActivity流程
+这里只分析与Binder调用相关的流程，分析到AcitivityManagerService就可以了，忽略其他细节。
+
+通常调用startActivity最终会调用Instrumentation#execStartActivity，就从这里开始看。
+
+## 3.1 Instrumentation#execStartActivity
+```java
+// Instrumentation.java
+public ActivityResult execStartActivity(
+    Context who, IBinder contextThread, IBinder token, String target,
+    Intent intent, int requestCode, Bundle options) {
+    IApplicationThread whoThread = (IApplicationThread) contextThread;
+    ...
+    try {
+        intent.migrateExtraStreamToClipData();
+        intent.prepareToLeaveProcess();
+        // 见3.1.1
+        int result = ActivityManagerNative.getDefault()
+            .startActivity(whoThread, who.getBasePackageName(), intent,
+                    intent.resolveTypeIfNeeded(who.getContentResolver()),
+                    token, target, requestCode, 0, null, options);
+        checkStartActivityResult(result, intent);
+    } catch (RemoteException e) {
+        throw new RuntimeException("Failure from system", e);
+    }
+    return null;
+}
+```
+
+## 3.2 获得ActivityManager服务
+```java
+// ActivityManagerNative.java
+static public IActivityManager getDefault() {
+    // 单例模式，第一次调用会指向下面的gDefault.create方法
+    return gDefault.get();
+}
+
+private static final Singleton<IActivityManager> gDefault = new Singleton<IActivityManager>() {
+    protected IActivityManager create() {
+        // 见3.2.1
+        IBinder b = ServiceManager.getService("activity");
+        if (false) {
+            Log.v("ActivityManager", "default service binder = " + b);
+        }
+        // 见3.2.4
+        IActivityManager am = asInterface(b);
+        if (false) {
+            Log.v("ActivityManager", "default service = " + am);
+        }
+        return am;
+    }
+};
+```
+
+最终返回的是ActivityManagerProxy，传入的构造参数为BinderProxy，其mObject字段指向native对象BpBinder，其handle最终指向ActivityManagerService。
+
+### 3.2.1 ServiceManager#getService
+```java
+// ServiceManager.java
+// name = "activity"
+public static IBinder getService(String name) {
+    try {
+        IBinder service = sCache.get(name);
+        if (service != null) {
+            return service;
+        } else {
+            // 获取的是ServiceManagerProxy
+            return getIServiceManager().getService(name);
+        }
+    } catch (RemoteException e) {
+        Log.e(TAG, "error in getService", e);
+    }
+    return null;
+}
+
+//name = "activity"
+public IBinder getService(String name) throws RemoteException {
+    Parcel data = Parcel.obtain();
+    Parcel reply = Parcel.obtain();
+    data.writeInterfaceToken(IServiceManager.descriptor);
+    data.writeString(name);
+    // 见3.2.2
+    mRemote.transact(GET_SERVICE_TRANSACTION, data, reply, 0);
+    // 见3.2.3
+    IBinder binder = reply.readStrongBinder();
+    reply.recycle();
+    data.recycle();
+    return binder;
+}
+```
+
+### 3.2.2 svcmgr_handler
+忽略中间的调用过程，直接看下service_manager查出后的执行过程。
+```c++
+//service_manager.c
+int svcmgr_handler(struct binder_state *bs,
+                   struct binder_transaction_data *txn,
+                   struct binder_io *msg,
+                   struct binder_io *reply)
+{
+    struct svcinfo *si;
+    uint16_t *s;
+    size_t len;
+    uint32_t handle;
+    uint32_t strict_policy;
+    int allow_isolated;
+    ...
+    switch(txn->code) {
+    case SVC_MGR_GET_SERVICE:
+    case SVC_MGR_CHECK_SERVICE:
+        s = bio_get_string16(msg, &len);
+        if (s == NULL) {
+            return -1;
+        }
+        // 根据"activity"查出handle
+        handle = do_find_service(bs, s, len, txn->sender_euid, txn->sender_pid);
+        if (!handle)
+            break;
+        bio_put_ref(reply, handle);
+        return 0;
+    ...
+    }
+
+    bio_put_uint32(reply, 0);
+    return 0;
+}
+
+void bio_put_ref(struct binder_io *bio, uint32_t handle)
+{
+    struct flat_binder_object *obj;
+
+    if (handle)
+        obj = bio_alloc_obj(bio);
+    else
+        obj = bio_alloc(bio, sizeof(*obj));
+
+    if (!obj)
+        return;
+
+    obj->flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
+    obj->type = BINDER_TYPE_HANDLE;
+    obj->handle = handle;
+    obj->cookie = 0;
+}
+```
+这里往reply中写入了两个数据，一个是flat_binder_object，其type为BINDER_TYPE_HANDLE，其handle则是驱动为ActivityManagerService的binder_node所创建的一个引用binder_ref的句柄。Service Manager反馈时，驱动会根据handle在Service Manager的proc下查出binder_ref，通过binder_ref->node取出ActivityManagerService的binder_node，然后在请求线程所在进程的proc下创建一个新的binder_ref，然后返回这个新创建的binder_ref的handle字段。
+
+也就是说，一个服务对象的binder_node只有一个，位于创建服务的进程的proc下，而其他所有进程如果想引用该服务都会在其对应进程的proc下创建自己的binder_ref。
+
+### 3.2.3 readStrongBinder
+
+调用完成后会执行reply.readStrongBinder()，该方法是一个native方法android_os_Parcel_readStrongBinder。
+
+```c++
+// android_os_Parcel.cpp
+static jobject android_os_Parcel_readStrongBinder(JNIEnv* env, jclass clazz, jlong nativePtr)
+{
+    Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
+    if (parcel != NULL) {
+        return javaObjectForIBinder(env, parcel->readStrongBinder());
+    }
+    return NULL;
+}
+```
+parcel->readStrongBinder会创建一个BpBinder对象，传入handle作为构造参数。javaObjectForIBinder会创建一个android.os.BinderProxy的Java对象，并将BpBinder对象的地址赋给BinderProxy的mObject字段。
+
+### 3.2.4 IActivityManager#asInterface
+```java
+// ActivityManagerNative.java
+// obj = BinderProxy对象
+static public IActivityManager asInterface(IBinder obj) {
+    if (obj == null) {
+        return null;
+    }
+    IActivityManager in =
+        (IActivityManager)obj.queryLocalInterface(descriptor);
+    if (in != null) {
+        return in;
+    }
+    // 最终返回ActivityManagerProxy
+    return new ActivityManagerProxy(obj);
+}
+```
+
+## 3.3 ActivityManagerProxy#startActivity
+```java
+// ActivityManagerNative.java
+public int startActivity(IApplicationThread caller, String callingPackage, Intent intent,
+        String resolvedType, IBinder resultTo, String resultWho, int requestCode,
+        int startFlags, ProfilerInfo profilerInfo, Bundle options) throws RemoteException {
+    Parcel data = Parcel.obtain();
+    Parcel reply = Parcel.obtain();
+    ...
+    mRemote.transact(START_ACTIVITY_TRANSACTION, data, reply, 0);
+    reply.readException();
+    int result = reply.readInt();
+    reply.recycle();
+    data.recycle();
+    return result;
+}
+```
+省略掉中间过程，直接看看binder驱动如何操作。驱动从取出handle后，在当前进程的proc下查找binder_ref，binder_ref->node便是target_node，其中的cookie字段即是BBinder的地址。
+
+回到IPCThreadState.cpp，在执行BR_TRANSACTION时会根据cookie找到BBinder对象，实际上是JavaBBinder对象，其mObject字段指向ActivityManagerService的Java对象。
+```c++
+if (tr.target.ptr) {
+    // We only have a weak reference on the target object, so we must first try to
+    // safely acquire a strong reference before doing anything else with it.
+    if (reinterpret_cast<RefBase::weakref_type*>(
+            tr.target.ptr)->attemptIncStrong(this)) {
+        // 见3.3.1
+        error = reinterpret_cast<BBinder*>(tr.cookie)->transact(tr.code, buffer,
+                &reply, tr.flags);
+        reinterpret_cast<BBinder*>(tr.cookie)->decStrong(this);
+    } else {
+        error = UNKNOWN_TRANSACTION;
+    }
+
+}
+```
+### 3.3.1 BBinder::transact
+```c++
+// code = START_ACTIVITY_TRANSACTION
+status_t BBinder::transact(
+    uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
+{
+    data.setDataPosition(0);
+
+    status_t err = NO_ERROR;
+    switch (code) {
+        case PING_TRANSACTION:
+            reply->writeInt32(pingBinder());
+            break;
+        default:
+            // JavaBBinder继承BBinder，见3.3.2
+            err = onTransact(code, data, reply, flags);
+            break;
+    }
+
+    if (reply != NULL) {
+        reply->setDataPosition(0);
+    }
+
+    return err;
+}
+```
+### 3.3.2 JavaBBinder::onTransact
+```c++
+// android_os_Binder.cpp
+// code = START_ACTIVITY_TRANSACTION
+virtual status_t onTransact(
+    uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags = 0)
+{
+    JNIEnv* env = javavm_to_jnienv(mVM);
+
+    IPCThreadState* thread_state = IPCThreadState::self();
+    const int32_t strict_policy_before = thread_state->getStrictModePolicy();
+
+    // 执行Java对象的execTransact方法，见3.3.3
+    jboolean res = env->CallBooleanMethod(mObject, gBinderOffsets.mExecTransact,
+        code, reinterpret_cast<jlong>(&data), reinterpret_cast<jlong>(reply), flags);
+    ...
+    return res != JNI_FALSE ? NO_ERROR : UNKNOWN_TRANSACTION;
+}
+```
+### 3.3.3 Binder#execTransact
+```java
+// Binder.java
+// code = START_ACTIVITY_TRANSACTION
+private boolean execTransact(int code, long dataObj, long replyObj,
+        int flags) {
+    Parcel data = Parcel.obtain(dataObj);
+    Parcel reply = Parcel.obtain(replyObj);
+    
+    boolean res;
+    ...
+    try {
+        res = onTransact(code, data, reply, flags);
+    } catch (RemoteException e) {
+      ...
+    }
+    ...
+    return res;
+}
+```
+最终调用ActivityManagerSerivce的onTransact方法。
