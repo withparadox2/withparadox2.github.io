@@ -1385,7 +1385,7 @@ sp<IBinder> ibinderForJavaObject(JNIEnv* env, jobject obj)
     // native端的JavaBBinderHolder对象，见2.1.4.1.1
     JavaBBinderHolder* jbh = (JavaBBinderHolder*)
       env->GetLongField(obj, gBinderOffsets.mObject);
-    // 见2.1.4.1.2
+    // jbh->get返回的是一个JavaBBinder对象，见2.1.4.1.2
     return jbh != NULL ? jbh->get(env, obj) : NULL;
   }
 
@@ -1402,7 +1402,7 @@ sp<IBinder> ibinderForJavaObject(JNIEnv* env, jobject obj)
 最终返回一个JavaBBinder对象，其mObject字段引用ActivityManagerService对象。
 
 ##### 2.1.4.1.1 android_os_Binder_init
-Java端Binder类的构造方法会调用一个native方法init，在该native方法中会创建一个JavaBBinderHolder的native对象，并将其地址赋给Java对象的mObject字段。
+ActivityManagerService继承Binder类。Java端Binder类的构造方法会调用一个native方法init，在该native方法中会创建一个JavaBBinderHolder的native对象，并将其地址赋给Java对象的mObject字段。
 ```c++
 // android_util_Binder.cpp
 static void android_os_Binder_init(JNIEnv* env, jobject obj)
@@ -3156,5 +3156,99 @@ void IPCThreadState::freeBuffer(Parcel* parcel, const uint8_t* data,
 
 调用方线程被唤醒后，处理并清除todo中的任务（BINDER_WORK_TRANSACTION），返回命令BR_REPLY，接着一路返回。
 
-在Java中，IBinder是基础接口，Binder和BinderProxy都继承IBinder。服务提供着需要继承Binder，例如ActivityManagerService。而服务调用者则包含一个BinderProxy对象，例如ActivityManagerProxy。服务提供者和服务调用者都需要实现业务接口，二者皆实现IActivityManager。
+关于Binder：
 
+在Java中，IBinder是基础接口，Binder和BinderProxy都继承IBinder。服务提供着需要继承Binder，例如ActivityManagerService。而服务调用者则包含一个BinderProxy对象，例如ActivityManagerProxy。服务提供者和服务调用者都需要实现业务接口，二者皆实现IActivityManager。简化的代码如下：
+```java
+interface IInterface {
+  public IBinder asBinder();
+}
+interface IBinder {
+  public boolean transact();
+  public IInterface queryLocalInterface(String descriptor)
+}
+class BinderProxy implements IBinder {
+  public boolean transact() {
+    // 最终发起binder系统调用
+  }
+  public IInterface queryLocalInterface(String descriptor) {
+    return null;
+  }
+}
+class Binder implements IBinder {
+  private IInterface mOwner;
+  private String mDescriptor;
+
+  protected boolean onTransact() {}
+  public final boolean transact() {
+    boolean r = onTransact(code, data, reply, flags);
+    return r;
+  }
+  public void attachInterface(IInterface owner, String descriptor) {
+    mOwner = owner;
+    mDescriptor = descriptor;
+  }
+  public IInterface queryLocalInterface(String descriptor) {
+    if (mDescriptor.equals(descriptor)) {
+      return mOwner;
+    }
+    return null;
+  }
+}
+interface IActivityManager implements IInterface {
+  void startActivity()
+}
+class ActivityManagerProxy implements IActivityManager {
+  IBinder mRemote;
+  ActivityManagerProxy(IBinder remote) {
+    this.mRemote = remote;
+  }
+  void startActivity() {
+    mRemote.transact("startActivity")
+  }
+  public IBinder asBinder() {
+    return mRemote;
+  }
+}
+class ActivityManagerService implements IActivityManager, Binder {
+  public ActivityManagerNative() {
+    attachInterface(this, "android.app.IActivityManager");
+  }
+  public IBinder asBinder() {
+    return this;
+  }
+  void startActivity() {
+    // 最终实现的功能
+  }
+  protected boolean onTransact() {
+    switch(xx) {
+      case "startActivity":
+        startActivity();
+        break;
+    }
+  }
+}
+```
+调用流程：
+```
+ActivityManagerProxy.startActivity
+mRemote.transact()
+Binder Driver
+ActivityManagerService.onTransact
+ActivityManagerService.startActivity
+```
+将IBinder转为业务类型：
+```java
+static public IActivityManager asInterface(IBinder obj) {
+  if (obj == null) {
+      return null;
+  }
+  IActivityManager in =
+      (IActivityManager)obj.queryLocalInterface("android.app.IActivityManager");
+  if (in != null) {
+    return in;
+  }
+
+  return new ActivityManagerProxy(obj);
+}
+```
