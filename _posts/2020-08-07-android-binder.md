@@ -8,9 +8,9 @@ tags:
   - Android
 ---
 
-# 1 Service Manager成为Context Manager
+# 1 Service Manager 成为 Context Manager
 
-Binder初始化及Service Manager成为Context Manager。 
+Binder 初始化及 Service Manager 成为 Context Manager。 
 
 ## 1.1 binder_init
 ```c
@@ -53,7 +53,7 @@ static int __init binder_init(void)
 device_initcall(binder_init);
 MODULE_LICENSE("GPL v2");
 ```
-当内核加载驱动时便会执行device_initcall所传入的方法（binder_init）进行初始化。在该方法中最重要的一步便是调用mis_register进行注册，而且binder_miscdev也指定了设备的名字为binder以及一个包含文件操作方法的结构体binder_fops。后面用户便可以通过系统调用如open, ioctl打开并与驱动进行交互了。
+当内核加载驱动时便会执行 device_initcall 所传入的方法（binder_init）进行初始化。在该方法中最重要的一步便是调用 mis_register 进行注册，而且 binder_miscdev 也指定了设备的名字为 binder 以及一个包含文件操作方法的结构体 binder_fops。后面用户便可以通过系统调用如 open、ioctl 打开并与驱动进行交互了。
 
 ## 1.2 main
 ```c
@@ -62,20 +62,20 @@ int main(int argc, char **argv)
 {
     struct binder_state *bs;
 
-    // 打开binder驱动，指定内存大小为128kb，见1.3
+    // 打开 binder 驱动，指定内存大小为 128kb，见 1.3
     bs = binder_open(128*1024);
     if (!bs) {
         ALOGE("failed to open binder driver\n");
         return -1;
     }
 
-    // 成为Context Manager，见1.4
+    // 成为 Context Manager，见 1.4
     if (binder_become_context_manager(bs)) {
         ALOGE("cannot become context manager (%s)\n", strerror(errno));
         return -1;
     }
     ...
-    // 进入循环，等待请求，见1.5
+    // 进入循环，等待请求，见 1.5
     binder_loop(bs, svcmgr_handler);
 
     return 0;
@@ -97,7 +97,7 @@ struct binder_state *binder_open(size_t mapsize)
         errno = ENOMEM;
         return NULL;
     }
-    // 会执行binder驱动里的binder_open，返回的fd为文件句柄，用来和binder进行通信，见1.3.1
+    // 会执行 binder 驱动里的 binder_open，返回的 fd 为文件句柄，用来和 binder 进行通信，见 1.3.1
     bs->fd = open("/dev/binder", O_RDWR);
     if (bs->fd < 0) {
         fprintf(stderr,"binder: cannot open device (%s)\n",
@@ -105,7 +105,7 @@ struct binder_state *binder_open(size_t mapsize)
         goto fail_open;
     }
 
-    // 检测和binder驱动的版本是否相同，见1.3.2
+    // 检测和 binder 驱动的版本是否相同，见 1.3.2
     if ((ioctl(bs->fd, BINDER_VERSION, &vers) == -1) ||
         (vers.protocol_version != BINDER_CURRENT_PROTOCOL_VERSION)) {
         fprintf(stderr, "binder: kernel driver version (%d) differs from user space version (%d)\n", vers.protocol_version, BINDER_CURRENT_PROTOCOL_VERSION);
@@ -113,7 +113,7 @@ struct binder_state *binder_open(size_t mapsize)
     }
 
     bs->mapsize = mapsize;
-    // 见1.3.3
+    // 见 1.3.3
     bs->mapped = mmap(NULL, mapsize, PROT_READ, MAP_PRIVATE, bs->fd, 0);
     if (bs->mapped == MAP_FAILED) {
         fprintf(stderr,"binder: cannot map device (%s)\n", strerror(errno));
@@ -141,7 +141,7 @@ static int binder_open(struct inode *nodp, struct file *filp)
   if (proc == NULL)
     return -ENOMEM;
 
-  // current为发起系统调用的进程
+  // current 为发起系统调用的进程
   get_task_struct(current);
   proc->tsk = current;
   INIT_LIST_HEAD(&proc->todo);
@@ -153,18 +153,18 @@ static int binder_open(struct inode *nodp, struct file *filp)
   proc->pid = current->group_leader->pid;
   // ???
   INIT_LIST_HEAD(&proc->delivered_death);
-  // 保存proc，后面mmap或ioctl时可取出
+  // 保存 proc，后面 mmap 或 ioctl 时可取出
   filp->private_data = proc;
   mutex_unlock(&binder_lock);
   ...
   return 0;
 }
 ```
-每个进程在与驱动交互之前都会进行open和mmap操作，binder驱动会在内核为其创建一个proc对象，并进行初始化，之后会将proc对象记录在binder_procs这个列表里。filp为file pointer，在调用open之前，内核会将filp->private_data置为NULL，该字段可以用来保存数据，以便在后面取出。
+每个进程在与驱动交互之前都会进行 open 和 mmap 操作，binder 驱动会在内核为其创建一个 proc 对象，并进行初始化，之后会将 proc 对象记录在 binder_procs 这个列表里。filp 为 file pointer，在调用 open 之前，内核会将 filp->private_data 置为 NULL，该字段可以用来保存数据，以便在后面取出。
 
-其中proc->todo用来保存待处理的任务，proc->wait则用来进行休眠。当没有任务时服务提供者就会休眠，等待其他线程调用wake_up_interruptible(wait)来唤醒。后面还将出现thread对象，它也包含todo和wait两个变量。
+其中 proc->todo 用来保存待处理的任务，proc->wait 则用来进行休眠。当没有任务时服务提供者就会休眠，等待其他线程调用 wake_up_interruptible(wait) 来唤醒。后面还将出现 thread 对象，它也包含 todo 和 wait 两个变量。
 
-### 1.3.2 ioctl (获取binder版本)
+### 1.3.2 ioctl (获取 binder 版本)
 ```c
 // kernel/drivers/android/binder.c
 // cmd = BINDER_VERSION = _IOWR('b', 9, struct binder_version)
@@ -172,10 +172,10 @@ static int binder_open(struct inode *nodp, struct file *filp)
 static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
   int ret;
-  // 取出在binder_open时保存的proc
+  // 取出在 binder_open 时保存的 proc
   struct binder_proc *proc = filp->private_data;
   struct binder_thread *thread;
-  // 参数arg所指向内容的大小
+  // 参数 arg 所指向内容的大小
   unsigned int size = _IOC_SIZE(cmd);
   void __user *ubuf = (void __user *)arg;
   
@@ -201,25 +201,25 @@ err:
   return ret;
 }
 ```
-arg是一个指向位于用户空间的struct binder_version的指针，而所指向内容的大小信息保存在cmd中，通过_IOC_SIZE可以解析出来。
+arg 是一个指向位于用户空间的 struct binder_version 的指针，而所指向内容的大小信息保存在 cmd 中，通过_IOC_SIZE 可以解析出来。
 
-由于arg指向的地址位于用户空间，不能直接操作，所以这里通过put_user将版本信息保存到结构体的protocol_version字段里。
+由于 arg 指向的地址位于用户空间，不能直接操作，所以这里通过 put_user 将版本信息保存到结构体的 protocol_version 字段里。
 
 ### 1.3.3 binder_mmap
 ```c
 // kernel/drivers/android/binder.c
-// vma包含用户空间的虚拟内存分配信息
+// vma 包含用户空间的虚拟内存分配信息
 static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
 {
   int ret;
   // 内核空间虚拟内存分配信息
   struct vm_struct *area;
-  // 取出proc
+  // 取出 proc
   struct binder_proc *proc = filp->private_data;
   const char *failure_string;
   struct binder_buffer *buffer;
  
-  // 保证最大分配不超过4Mb，这里请求时只有128Kb
+  // 保证最大分配不超过 4Mb，这里请求时只有 128Kb
   if ((vma->vm_end - vma->vm_start) > SZ_4M)
     vma->vm_end = vma->vm_start + SZ_4M;
 
@@ -258,7 +258,7 @@ static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
   vma->vm_ops = &binder_vm_ops;
   vma->vm_private_data = proc;
   
-  // 先分配1个页面的物理内存，见1.3.3.1
+  // 先分配 1 个页面的物理内存，见 1.3.3.1
   if (binder_update_page_range(proc, 1, proc->buffer, proc->buffer + PAGE_SIZE, vma)) {
     ret = -ENOMEM;
     failure_string = "alloc small buf";
@@ -267,12 +267,12 @@ static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
   // 不进行初始化???
   buffer = proc->buffer;
   INIT_LIST_HEAD(&proc->buffers);
-  // 将buffer加入到proc->buffers列表中
+  // 将 buffer 加入到 proc->buffers 列表中
   list_add(&buffer->entry, &proc->buffers);
   buffer->free = 1;
-  // 将该buffer加入到未使用的buffer树中，见1.3.3.2
+  // 将该 buffer 加入到未使用的 buffer 树中，见 1.3.3.2
   binder_insert_free_buffer(proc, buffer);
-  // 用于异步请求的buffer只有一半大小，具体如何使用???
+  // 用于异步请求的 buffer 只有一半大小，具体如何使用???
   proc->free_async_space = proc->buffer_size / 2;
   barrier();
   proc->files = get_files_struct(current);
@@ -295,11 +295,11 @@ err_bad_arg:
 }
 
 ```
-调用get_vm_area在内核空间分配一段虚拟内存，最大不超过4Mb。由于用户空间和内核空间分配的这块虚拟内存指向同一处物理内存，因此知道这二者之差便可以将其进行地址转换。例如，如果知道内核空间地址为addr1，那么用户空间的地址便可通过简单的加法计算出来 proc->user_buffer_offset + addr1。
+调用 get_vm_area 在内核空间分配一段虚拟内存，最大不超过 4Mb。由于用户空间和内核空间分配的这块虚拟内存指向同一处物理内存，因此知道这二者之差便可以将其进行地址转换。例如，如果知道内核空间地址为 addr1，那么用户空间的地址便可通过简单的加法计算出来 proc->user_buffer_offset + addr1。
 
-这里有个问题，buffer是一个指向struct binder_buffer的指针，而proc->buffer指向的是一段连续的虚拟内存，为何可以直接将proc->buffer赋值给buffer而不用初始化？
+这里有个问题，buffer 是一个指向 struct binder_buffer 的指针，而 proc->buffer 指向的是一段连续的虚拟内存，为何可以直接将 proc->buffer 赋值给 buffer 而不用初始化？
 
-事实上，在binder_update_page_range中已经分配了一段大小为一个页面的物理内存，并且初始化为0。buffer的一个应用是通过binder_buffer_size计算大小，这一步并不需要多余的初始化：
+事实上，在 binder_update_page_range 中已经分配了一段大小为一个页面的物理内存，并且初始化为 0。buffer 的一个应用是通过 binder_buffer_size 计算大小，这一步并不需要多余的初始化：
 
 ```c
 // kernel/drivers/android/binder.c
@@ -307,14 +307,14 @@ static size_t binder_buffer_size(struct binder_proc *proc,
          struct binder_buffer *buffer)
 {
   if (list_is_last(&buffer->entry, &proc->buffers))
-    // 用整段buffer的结束地址减去buffer结构体的结束地址
+    // 用整段 buffer 的结束地址减去 buffer 结构体的结束地址
     return proc->buffer + proc->buffer_size - (void *)buffer->data;
   else
     return (size_t)list_entry(buffer->entry.next,
       struct binder_buffer, entry) - (size_t)buffer->data;
 }
 ```
-buffer是连续的。buffer指向的内存包含了buffer的结构体，所以buffer的有效内存大小则是下一个buffer的起始地址减去当前buffer的结构体的结束地址，而buffer->data是一个位于结构体末尾的8位数组，因此buffer->data便可表示结构体的结束地址。
+buffer 是连续的。buffer 指向的内存包含了 buffer 的结构体，所以 buffer 的有效内存大小则是下一个 buffer 的起始地址减去当前 buffer 的结构体的结束地址，而 buffer->data 是一个位于结构体末尾的 8 位数组，因此 buffer->data 便可表示结构体的结束地址。
 
 ```c
 struct binder_buffer {
@@ -334,7 +334,7 @@ struct binder_buffer {
 };
 ```
 
-每个buffer包含一个entry字段，加入到proc->buffers列表中的也是entry字段。list_entry定义如下：
+每个 buffer 包含一个 entry 字段，加入到 proc->buffers 列表中的也是 entry 字段。list_entry 定义如下：
 
 ```c
 #define list_entry(ptr, type, member) \
@@ -344,13 +344,13 @@ struct binder_buffer {
   const typeof( ((type *)0)->member ) *__mptr = (ptr); \  
   (type *)( (char *)__mptr - offsetof(type,member) );}) \
 ```
-知道member和指向member的指针ptr，便可以计算出指向包含member的结构体type的指针。这种操作在其他内核数据结构中也常见，包括红黑树。
+知道 member 和指向 member 的指针 ptr，便可以计算出指向包含 member 的结构体 type 的指针。这种操作在其他内核数据结构中也常见，包括红黑树。
 
 #### 1.3.3.1 binder_update_page_range
 
 ```c++
 // kernel/drivers/android/binder.c
-// allocate = 1 当为0时表示释放物理内存
+// allocate = 1 当为 0 时表示释放物理内存
 // start = proc->buffer
 // end = proc->buffer + PAGE_SIZE
 static int binder_update_page_range(struct binder_proc *proc, int allocate,
@@ -389,7 +389,7 @@ static int binder_update_page_range(struct binder_proc *proc, int allocate,
   for (page_addr = start; page_addr < end; page_addr += PAGE_SIZE) {
     int ret;
     struct page **page_array_ptr;
-    // 这里取出第0个页面
+    // 这里取出第 0 个页面
     page = &proc->pages[(page_addr - proc->buffer) / PAGE_SIZE];
 
     BUG_ON(*page);
@@ -455,7 +455,7 @@ err_no_vma:
   return -ENOMEM;
 }
 ```
-问题：allocate等于0的情况？
+问题：allocate 等于 0 的情况？
 
 #### 1.3.3.2 binder_insert_free_buffer
 
@@ -472,7 +472,7 @@ static void binder_insert_free_buffer(struct binder_proc *proc,
 
   BUG_ON(!new_buffer->free);
 
-  // 计算计划插入的buffer有效空间大小
+  // 计算计划插入的 buffer 有效空间大小
   new_buffer_size = binder_buffer_size(proc, new_buffer);
 
   binder_debug(BINDER_DEBUG_BUFFER_ALLOC,
@@ -502,7 +502,7 @@ static void binder_insert_free_buffer(struct binder_proc *proc,
 // frameworks/native/cmds/servicemanager/binder.c
 int binder_become_context_manager(struct binder_state *bs)
 {
-    // 见1.4.1
+    // 见 1.4.1
     return ioctl(bs->fd, BINDER_SET_CONTEXT_MGR, 0);
 }
 ```
@@ -516,13 +516,13 @@ static struct binder_node *binder_context_mgr_node;
 static uid_t binder_context_mgr_uid = -1;
 
 // cmd = BINDER_SET_CONTEXT_MGR = _IOW('b', 7, int)
-// arg = 指向4字节内存，内容为0
+// arg = 指向 4 字节内存，内容为 0
 static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
   int ret;
   struct binder_proc *proc = filp->private_data;
   struct binder_thread *thread;
-  // arg指向内存大小，这里大小为4，内容为0
+  // arg 指向内存大小，这里大小为 4，内容为 0
   unsigned int size = _IOC_SIZE(cmd);
   void __user *ubuf = (void __user *)arg;
 
@@ -538,7 +538,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     ret = security_binder_set_context_mgr(proc->tsk);
     if (ret < 0)
       goto err;
-    // binder_context_mgr_uid默认为-1
+    // binder_context_mgr_uid 默认为-1
     if (binder_context_mgr_uid != -1) {
       if (binder_context_mgr_uid != current->cred->euid) {
         printk(KERN_ERR "binder: BINDER_SET_"
@@ -550,13 +550,13 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
       }
     } else
       binder_context_mgr_uid = current->cred->euid;
-    // 创建一个binder_node，见1.4.1.1
+    // 创建一个 binder_node，见 1.4.1.1
     binder_context_mgr_node = binder_new_node(proc, NULL, NULL);
     if (binder_context_mgr_node == NULL) {
       ret = -ENOMEM;
       goto err;
     }
-    // 将各种引用加1，干什么用？？？
+    // 将各种引用加 1，干什么用？？？
     binder_context_mgr_node->local_weak_refs++;
     binder_context_mgr_node->local_strong_refs++;
     binder_context_mgr_node->has_strong_ref = 1;
@@ -600,10 +600,10 @@ static struct binder_node *binder_new_node(struct binder_proc *proc,
   if (node == NULL)
     return NULL;
   binder_stats_created(BINDER_STAT_NODE);
-  // 将新创建的node插入红黑树中，其父节点为parent
+  // 将新创建的 node 插入红黑树中，其父节点为 parent
   rb_link_node(&node->rb_node, parent, p);
   rb_insert_color(&node->rb_node, &proc->nodes);
-  // 每次创建debug_id加1
+  // 每次创建 debug_id 加 1
   node->debug_id = ++binder_last_id;
   node->proc = proc;
   node->ptr = ptr;
@@ -618,13 +618,13 @@ static struct binder_node *binder_new_node(struct binder_proc *proc,
   return node;
 }
 ```
-该方法创建一个新的binder_node，插入到proc->nodes中，然后进行初始化。
+该方法创建一个新的 binder_node，插入到 proc->nodes 中，然后进行初始化。
 
 ## 1.5 binder_loop
 
 ```c
 // frameworks/native/cmds/servicemanager/binder.c
-// bs = binder_open的返回值
+// bs = binder_open 的返回值
 // func = svcmgr_handler
 void binder_loop(struct binder_state *bs, binder_handler func)
 {
@@ -637,7 +637,7 @@ void binder_loop(struct binder_state *bs, binder_handler func)
     bwr.write_buffer = 0;
 
     readbuf[0] = BC_ENTER_LOOPER;
-    // 见1.5.1
+    // 见 1.5.1
     binder_write(bs, readbuf, sizeof(uint32_t));
 
     for (;;) {
@@ -645,7 +645,7 @@ void binder_loop(struct binder_state *bs, binder_handler func)
         bwr.read_consumed = 0;
         bwr.read_buffer = (uintptr_t) readbuf;
 
-        // 见1.5.2
+        // 见 1.5.2
         res = ioctl(bs->fd, BINDER_WRITE_READ, &bwr);
 
         if (res < 0) {
@@ -653,7 +653,7 @@ void binder_loop(struct binder_state *bs, binder_handler func)
             break;
         }
 
-        // 见1.5.3
+        // 见 1.5.3
         res = binder_parse(bs, 0, (uintptr_t) readbuf, bwr.read_consumed, func);
         if (res == 0) {
             ALOGE("binder_loop: unexpected reply?!\n");
@@ -670,7 +670,7 @@ void binder_loop(struct binder_state *bs, binder_handler func)
 ### 1.5.1 binder_write & ioctl (BINDER_SET_CONTEXT_MGR#BC_ENTER_LOOPER)
 ```c
 // frameworks/native/cmds/servicemanager/binder.c
-// data = readbuf，大小为32的4字节数组，其中readbuf[0] = BC_ENTER_LOOPER
+// data = readbuf，大小为 32 的 4 字节数组，其中 readbuf[0] = BC_ENTER_LOOPER
 // len = 4
 int binder_write(struct binder_state *bs, void *data, size_t len)
 {
@@ -697,11 +697,11 @@ int binder_write(struct binder_state *bs, void *data, size_t len)
 // kernel/drivers/android/binder.c
 /*
 cmd = BINDER_WRITE_READ = _IOWR('b', 1, struct binder_write_read)
-arg = 指向binder_write_read结构体，内容如下：
+arg = 指向 binder_write_read 结构体，内容如下：
 {
   write_size: 4,
   write_consumed: 0,
-  write_buffer: 大小32的数组，[BC_ENTER_LOOPER, ... ],
+  write_buffer: 大小 32 的数组，[BC_ENTER_LOOPER, ... ],
   read_size: 0,
   read_consumed: 0,
   read_buffer: 0
@@ -716,7 +716,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
   void __user *ubuf = (void __user *)arg;
   ...
   mutex_lock(&binder_lock);
-  // 查找或创建当前线程的结构体，见1.5.1.1
+  // 查找或创建当前线程的结构体，见 1.5.1.1
   thread = binder_get_thread(proc);
   if (thread == NULL) {
     ret = -ENOMEM;
@@ -730,17 +730,17 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
       ret = -EINVAL;
       goto err;
     }
-    // 将用户空间的数据拷贝到内核空间，但是bwr.write_buffer目前依然指向用户空间 
+    // 将用户空间的数据拷贝到内核空间，但是 bwr.write_buffer 目前依然指向用户空间 
     if (copy_from_user(&bwr, ubuf, sizeof(bwr))) {
       ret = -EFAULT;
       goto err;
     }
-    // write_size为4
+    // write_size 为 4
     if (bwr.write_size > 0) {
-      // 见1.5.1.2
+      // 见 1.5.1.2
       ret = binder_thread_write(proc, thread, (void __user *)bwr.write_buffer, bwr.write_size, &bwr.write_consumed);
       if (ret < 0) {
-        // 如果出错，则设置read_consumed为0，意即驱动没有写入任何数据，返回
+        // 如果出错，则设置 read_consumed 为 0，意即驱动没有写入任何数据，返回
         bwr.read_consumed = 0;
         if (copy_to_user(ubuf, &bwr, sizeof(bwr)))
           ret = -EFAULT;
@@ -748,12 +748,12 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
       }
     }
     
-    // bwr.read_size为0，跳过
+    // bwr.read_size 为 0，跳过
     if (bwr.read_size > 0) {
       ...
     }
     
-    // 把bwr拷贝到用户空间，准备返回到用户空间
+    // 把 bwr 拷贝到用户空间，准备返回到用户空间
     if (copy_to_user(ubuf, &bwr, sizeof(bwr))) {
       ret = -EFAULT;
       goto err;
@@ -770,7 +770,7 @@ err:
   return ret;
 }
 ```
-执行完成后，返回到1.5，继续执行for循环里面的内容。
+执行完成后，返回到 1.5，继续执行 for 循环里面的内容。
 
 ##### 1.5.1.1 binder_get_thread
 ```c
@@ -792,7 +792,7 @@ static struct binder_thread *binder_get_thread(struct binder_proc *proc)
     else
       break;
   }
-  // 没有找到，则新创建一个binder_thread
+  // 没有找到，则新创建一个 binder_thread
   if (*p == NULL) {
     thread = kzalloc(sizeof(*thread), GFP_KERNEL);
     if (thread == NULL)
@@ -811,12 +811,12 @@ static struct binder_thread *binder_get_thread(struct binder_proc *proc)
   return thread;
 }
 ```
-在proc->threads中根据发起请求线程的pid查找binder_thread对象，如果没找到，则创建一个，并插入到proc->threads，然后进行初始化。
+在 proc->threads 中根据发起请求线程的 pid 查找 binder_thread 对象，如果没找到，则创建一个，并插入到 proc->threads，然后进行初始化。
 
 ##### 1.5.1.2 binder_thread_write
 ```c
 // kernel/drivers/android/binder.c
-// buffer = 指向用户空间的32位数组，[BC_ENTER_LOOPER, ... ]
+// buffer = 指向用户空间的 32 位数组，[BC_ENTER_LOOPER, ... ]
 // size = 4
 // *write_consumed = 0
 int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
@@ -827,7 +827,7 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
   void __user *end = buffer + size;
   // thread->return_error 默认为 BR_OK
   while (ptr < end && thread->return_error == BR_OK) {
-    // 从用户空间取出前4个字节为 BC_ENTER_LOOPER
+    // 从用户空间取出前 4 个字节为 BC_ENTER_LOOPER
     if (get_user(cmd, (uint32_t __user *)ptr))
       return -EFAULT;
     ptr += sizeof(uint32_t);
@@ -841,7 +841,7 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
       binder_debug(BINDER_DEBUG_THREADS,
              "binder: %d:%d BC_ENTER_LOOPER\n",
              proc->pid, thread->pid);
-      // 如果已经注册了，则写入错误flag，何用???
+      // 如果已经注册了，则写入错误 flag，何用???
       if (thread->looper & BINDER_LOOPER_STATE_REGISTERED) {
         thread->looper |= BINDER_LOOPER_STATE_INVALID;
         binder_user_error("binder: %d:%d ERROR:"
@@ -849,7 +849,7 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
           "BC_REGISTER_LOOPER\n",
           proc->pid, thread->pid);
       }
-      // 标识该thread已经就绪
+      // 标识该 thread 已经就绪
       thread->looper |= BINDER_LOOPER_STATE_ENTERED;
       break;
       ...
@@ -860,18 +860,18 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
   return 0;
 }
 ```
-此步执行完后bwr.write_consumed被改为4。
+此步执行完后 bwr.write_consumed 被改为 4。
 
 ### 1.5.2 ioctl
 ```c
 // kernel/drivers/android/binder.c
 /*
 cmd = BINDER_WRITE_READ = _IOWR('b', 1, struct binder_write_read)
-arg = 指向binder_write_read结构体，内容如下：
+arg = 指向 binder_write_read 结构体，内容如下：
 {
   write_size: 4,
   write_consumed: 4,
-  write_buffer: 32个4字节的数组，[BC_ENTER_LOOPER, ... ],
+  write_buffer: 32 个 4 字节的数组，[BC_ENTER_LOOPER, ... ],
   read_size: 32 * 4,
   read_consumed: 0,
   read_buffer: 0
@@ -887,23 +887,23 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
       ret = -EINVAL;
       goto err;
     }
-    // 将用户空间的数据拷贝到内核空间，但是bwr.write_buffer目前依然指向用户空间 
+    // 将用户空间的数据拷贝到内核空间，但是 bwr.write_buffer 目前依然指向用户空间 
     if (copy_from_user(&bwr, ubuf, sizeof(bwr))) {
       ret = -EFAULT;
       goto err;
     }
-    // bwr.write_size为4
+    // bwr.write_size 为 4
     if (bwr.write_size > 0) {
-      // 由于write_consumed和write_size都为4，所以进去后不会执行相关代码
+      // 由于 write_consumed 和 write_size 都为 4，所以进去后不会执行相关代码
       ret = binder_thread_write(proc, thread, (void __user *)bwr.write_buffer, bwr.write_size, &bwr.write_consumed);
       ...
     }
     
-    // bwr.read_size为32*4
+    // bwr.read_size 为 32*4
     if (bwr.read_size > 0) {
-      // 见1.5.2.1
+      // 见 1.5.2.1
       ret = binder_thread_read(proc, thread, (void __user *)bwr.read_buffer, bwr.read_size, &bwr.read_consumed, filp->f_flags & O_NONBLOCK);
-      // 如果进程的todo里面还有任务要做，那么唤醒工作线程
+      // 如果进程的 todo 里面还有任务要做，那么唤醒工作线程
       if (!list_empty(&proc->todo))
         wake_up_interruptible(&proc->wait);
       if (ret < 0) {
@@ -913,7 +913,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
       }
     }
     
-    // 把bwr拷贝到用户空间，准备返回到用户空间
+    // 把 bwr 拷贝到用户空间，准备返回到用户空间
     if (copy_to_user(ubuf, &bwr, sizeof(bwr))) {
       ret = -EFAULT;
       goto err;
@@ -933,7 +933,7 @@ err:
 #### 1.5.2.1 binder_thread_read
 ```c++
 // kernel/drivers/android/binder.c
-// buffer = 指向用户空间的4字节数组，[BC_ENTER_LOOPER, ... ]
+// buffer = 指向用户空间的 4 字节数组，[BC_ENTER_LOOPER, ... ]
 // size = 32 * 4
 // *consumed = 0
 // non_block = 0
@@ -949,25 +949,25 @@ static int binder_thread_read(struct binder_proc *proc,
   int wait_for_proc_work;
 
   if (*consumed == 0) {
-    // 由于consumed位0，这里向buffer里面写入一个32位整数BR_NOOP
+    // 由于 consumed 位 0，这里向 buffer 里面写入一个 32 位整数 BR_NOOP
     if (put_user(BR_NOOP, (uint32_t __user *)ptr))
       return -EFAULT;
     ptr += sizeof(uint32_t);
   }
 
 retry:
-  // 还没有任务可处理，这里为true
+  // 还没有任务可处理，这里为 true
   wait_for_proc_work = thread->transaction_stack == NULL &&
         list_empty(&thread->todo);
   ...
   // 将当前线程的状态置为等待，稍后如果发现有任务会解除该状态
   thread->looper |= BINDER_LOOPER_STATE_WAITING;
-  // 如果当前线程自己没有任务可处理，说明已经准备处理进程的任务，于是这里将ready_threads加1
+  // 如果当前线程自己没有任务可处理，说明已经准备处理进程的任务，于是这里将 ready_threads 加 1
   if (wait_for_proc_work)
     proc->ready_threads++;
   mutex_unlock(&binder_lock);
   if (wait_for_proc_work) {
-    // 只有binder线程能到这里来取任务，如果不是则记录异常
+    // 只有 binder 线程能到这里来取任务，如果不是则记录异常
     if (!(thread->looper & (BINDER_LOOPER_STATE_REGISTERED |
           BINDER_LOOPER_STATE_ENTERED))) {
       binder_user_error("binder: %d:%d ERROR: Thread waiting "
@@ -983,14 +983,14 @@ retry:
       if (!binder_has_proc_work(proc, thread))
         ret = -EAGAIN;
     } else
-      // 对于阻塞情况，则等待唤醒，当binder_has_proc_work为true时才往后面执行
-      // binder_has_proc_work会检查proc的todo是否有任务。
+      // 对于阻塞情况，则等待唤醒，当 binder_has_proc_work 为 true 时才往后面执行
+      // binder_has_proc_work 会检查 proc 的 todo 是否有任务。
 
       // 目前我们就停在这里等待唤醒。
       ret = wait_event_interruptible_exclusive(proc->wait, binder_has_proc_work(proc, thread));
   } else {
     // 此时不会走这里。
-    // binder_has_thread_work会检测thread的todo是否有任务
+    // binder_has_thread_work 会检测 thread 的 todo 是否有任务
     if (non_block) {
       if (!binder_has_thread_work(thread))
         ret = -EAGAIN;
@@ -998,9 +998,9 @@ retry:
       ret = wait_event_interruptible(thread->wait, binder_has_thread_work(thread));
   }
   // 当线程被唤醒后会获取锁，在释放之前，其他线程即使被唤醒了也阻塞在这里。
-  // 只有当获取锁的线程重新进入上面retry释放锁后，其他线程方有机会获取锁。
+  // 只有当获取锁的线程重新进入上面 retry 释放锁后，其他线程方有机会获取锁。
   mutex_lock(&binder_lock);
-  // 如果此前线程没有自己的任务，这里准备执行进程任务了，于是可用的线程需要减1，并
+  // 如果此前线程没有自己的任务，这里准备执行进程任务了，于是可用的线程需要减 1，并
   // 删除线程的等待标识。
   if (wait_for_proc_work)
     proc->ready_threads--;
@@ -1008,11 +1008,11 @@ retry:
   ...
 }
 ```
-当在wait_event_interruptible_exclusive阻塞等待唤醒时，驱动已经往read_buffer里面写入一个整数BR_NOOP。
+当在 wait_event_interruptible_exclusive 阻塞等待唤醒时，驱动已经往 read_buffer 里面写入一个整数 BR_NOOP。
 
-# 2 注册ActivityManagerService
+# 2 注册 ActivityManagerService
 
-Zygote进程会创建SystemServer进程并调用SystemServer.main方法。下面从main方法开始看。
+Zygote 进程会创建 SystemServer 进程并调用 SystemServer.main 方法。下面从 main 方法开始看。
 
 ## 2.1 addService
 ```java
@@ -1056,11 +1056,11 @@ public void setSystemProcess() {
 ```java
 // frameworks/base/core/java/android/os/ServiceManager.java
 // name = "activity"
-// service = ActivityManagerService对象
+// service = ActivityManagerService 对象
 // allowIsolated = true
 public static void addService(String name, IBinder service, boolean allowIsolated) {
   try {
-    // addService 见2.1.2
+    // addService 见 2.1.2
     getIServiceManager().addService(name, service, allowIsolated);
   } catch (RemoteException e) {
     Log.e(TAG, "error in addService", e);
@@ -1094,18 +1094,18 @@ static public IServiceManager asInterface(IBinder obj) {
   return new ServiceManagerProxy(obj);
 }
 ```
-BinderInternal.getContextObject()是一个native方法，通过它得到一个IBinder对象。这里obj是一个BinderProxy对象，queryLocalInterface返回为null，因此我们得到的是一个ServiceManagerProxy对象。
+BinderInternal.getContextObject() 是一个 native 方法，通过它得到一个 IBinder 对象。这里 obj 是一个 BinderProxy 对象，queryLocalInterface 返回为 null，因此我们得到的是一个 ServiceManagerProxy 对象。
 
-下面看下如果获得IBinder对象。
+下面看下如果获得 IBinder 对象。
 
 ### 2.1.1 BinderInternal.getContextObject
 ```c++
 // android_util_binder.cpp
 static jobject android_os_BinderInternal_getContextObject(JNIEnv* env, jobject clazz)
 {
-   // 见2.1.1.1
+   // 见 2.1.1.1
     sp<IBinder> b = ProcessState::self()->getContextObject(NULL);
-  // 见2.1.1.2
+  // 见 2.1.1.2
     return javaObjectForIBinder(env, b);
 }
 ```
@@ -1123,7 +1123,7 @@ sp<ProcessState> ProcessState::self()
     return gProcess;
 }
 ```
-gProcess是一个单例，在初始化时会调用open_driver()打开binder驱动，并将文件符保存至mDriverFD字段中。下面看下getContextObject的实现。
+gProcess 是一个单例，在初始化时会调用 open_driver() 打开 binder 驱动，并将文件符保存至 mDriverFD 字段中。下面看下 getContextObject 的实现。
 
 ```c++
 // ProcessState.cpp
@@ -1139,7 +1139,7 @@ sp<IBinder> ProcessState::getStrongProxyForHandle(int32_t handle)
 
   AutoMutex _l(mLock);
 
-  // 根据handle在一个vector中查找，找不到则创建一个handle_entry，字段为null
+  // 根据 handle 在一个 vector 中查找，找不到则创建一个 handle_entry
   handle_entry* e = lookupHandleLocked(handle);
 
   if (e != NULL) {
@@ -1147,7 +1147,7 @@ sp<IBinder> ProcessState::getStrongProxyForHandle(int32_t handle)
     IBinder* b = e->binder;
     if (b == NULL || !e->refs->attemptIncWeak(this)) {
       if (handle == 0) {
-        // 检测context manager是否已经注册
+        // 检测 context manager 是否已经注册
         Parcel data;
         status_t status = IPCThreadState::self()->transact(
             0, IBinder::PING_TRANSACTION, data, NULL, 0);
@@ -1171,7 +1171,7 @@ sp<IBinder> ProcessState::getStrongProxyForHandle(int32_t handle)
   return result;
 }
 ```
-getContextObject返回的是一个构造参数为0的BpBinder对象。
+getContextObject 返回的是一个构造参数为 0 的 BpBinder 对象。
 
 #### 2.1.1.2 javaObjectForIBinder
 ```c++
@@ -1181,7 +1181,7 @@ jobject javaObjectForIBinder(JNIEnv* env, const sp<IBinder>& val)
 {
   if (val == NULL) return NULL;
 
-  // 检测是否为android.os.Binder的子类
+  // 检测是否为 android.os.Binder 的子类
   if (val->checkSubclass(&gBinderOffsets)) {
     jobject object = static_cast<JavaBBinder*>(val.get())->object();
     return object;
@@ -1192,17 +1192,17 @@ jobject javaObjectForIBinder(JNIEnv* env, const sp<IBinder>& val)
   AutoMutex _l(mProxyLock);
 
   // Someone else's...  do we know about it?
-  // BpBinder是刚刚创建的C++对象，不走这里，下一次就会走这里
+  // BpBinder 是刚刚创建的 C++对象，不走这里，下一次就会走这里
   jobject object = (jobject)val->findObject(&gBinderProxyOffsets);
   if (object != NULL) {
     ...
   }
 
-  // 创建一个android.os.BinderProxy的Java对象
+  // 创建一个 android.os.BinderProxy 的 Java 对象
   object = env->NewObject(gBinderProxyOffsets.mClass, gBinderProxyOffsets.mConstructor);
   if (object != NULL) {
     LOGDEATH("objectForBinder %p: created new proxy %p !\n", val.get(), object);
-    // 将BpBinder的地址赋给BinderProxy的mObject字段
+    // 将 BpBinder 的地址赋给 BinderProxy 的 mObject 字段
     env->SetLongField(object, gBinderProxyOffsets.mObject, (jlong)val.get());
     val->incStrong((void*)javaObjectForIBinder);
 
@@ -1223,7 +1223,7 @@ jobject javaObjectForIBinder(JNIEnv* env, const sp<IBinder>& val)
     incRefsCreated(env);
   }
 
-  // BinderProxy对象
+  // BinderProxy 对象
   return object;
 }
 ```
@@ -1231,37 +1231,37 @@ jobject javaObjectForIBinder(JNIEnv* env, const sp<IBinder>& val)
 ```java
 // frameworks/base/core/java/android/os/ServiceManagerNative.java
 // name = "activity"
-// service = ActivityManagerService对象
+// service = ActivityManagerService 对象
 // allowIsolated = true
 public void addService(String name, IBinder service, boolean allowIsolated)
       throws RemoteException {
-  // 见2.1.3  
+  // 见 2.1.3  
   Parcel data = Parcel.obtain();
   Parcel reply = Parcel.obtain();
-  // 见2.1.4
+  // 见 2.1.4
   data.writeInterfaceToken(IServiceManager.descriptor);
   data.writeString(name);
   data.writeStrongBinder(service);
   data.writeInt(allowIsolated ? 1 : 0);
-  // 见2.1.5
+  // 见 2.1.5
   mRemote.transact(ADD_SERVICE_TRANSACTION, data, reply, 0);
   reply.recycle();
   data.recycle();
 }
 ```
-这里的mRemote便为构造ServiceManagerProxy时传入的BinderProxy对象，它的mObject字段指向一个BpBinder的C++对象，该BpBinder对象的handle为0。
+这里的 mRemote 便为构造 ServiceManagerProxy 时传入的 BinderProxy 对象，它的 mObject 字段指向一个 BpBinder 的 C++对象，该 BpBinder 对象的 handle 为 0。
 
-往data中写入的内容包括：
+往 data 中写入的内容包括：
 - 整数：StrictPolicy
 - 字符串："android.os.IServiceManager"
 - 字符串："activity",
-- flat_binder_object结构体: 
+- flat_binder_object 结构体: 
 ```
 {
  flags: 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS,
  type: BINDER_TYPE_BINDER,
  binder: 弱引用,
- cookie: 指向Binder对象指针,
+ cookie: 指向 Binder 对象指针,
 }
 ```
 - 整数：1
@@ -1301,7 +1301,7 @@ private void init(long nativePtr) {
   }
 }
 ```
-obtain()会先从缓存池中获取Parcel，如果没有则新创建一个Parcel对象，传入参数为0，接下来调用native方法nativeCreate来创建一个native对象，并将对象指针保存到mNativePtr中。
+obtain() 会先从缓存池中获取 Parcel，如果没有则新创建一个 Parcel 对象，传入参数为 0，接下来调用 native 方法 nativeCreate 来创建一个 native 对象，并将对象指针保存到 mNativePtr 中。
 
 ```c++
 // android_os_Parcel.cpp
@@ -1311,7 +1311,7 @@ static jlong android_os_Parcel_create(JNIEnv* env, jclass clazz)
     return reinterpret_cast<jlong>(parcel);
 }
 ```
-### 2.1.4 向Parcel写入数据
+### 2.1.4 向 Parcel 写入数据
 ```java
 // Parcel.java
 // interfaceName = "android.os.IServiceManager"
@@ -1319,7 +1319,7 @@ public final void writeInterfaceToken(String interfaceName) {
   nativeWriteInterfaceToken(mNativePtr, interfaceName);
 }
 ```
-调用native方法。
+调用 native 方法。
 ```c++
 // android_os_Parcel.cpp
 // name = "android.os.IServiceManager"
@@ -1350,19 +1350,19 @@ status_t Parcel::writeInterfaceToken(const String16& interface)
   return writeString16(interface);
 }
 ```
-写入字符串时首先写入字符串长度，接着写入字符串内容，最后再写入一个整数0。
+写入字符串时首先写入字符串长度，接着写入字符串内容，最后再写入一个整数 0。
 
-data.writeString(name)和data.writeInt(allowIsolated ? 1 : 0)与writeInterfaceToken类似，不做分析，下面看看data.writeStrongBinder：
+data.writeString(name) 和 data.writeInt(allowIsolated ? 1 : 0) 与 writeInterfaceToken 类似，不做分析，下面看看 data.writeStrongBinder：
 
 ```c++
 // android_os_Parcel.cpp
-// object = ActivityManagerService对象
+// object = ActivityManagerService 对象
 static void android_os_Parcel_writeStrongBinder(JNIEnv* env, jclass clazz, jlong nativePtr, jobject object)
 {
   Parcel* parcel = reinterpret_cast<Parcel*>(nativePtr);
   if (parcel != NULL) {
-  // ibinderForJavaObject 见2.1.4.1
-  // writeStrongBinder 见2.1.4.2
+  // ibinderForJavaObject 见 2.1.4.1
+  // writeStrongBinder 见 2.1.4.2
     const status_t err = parcel->writeStrongBinder(ibinderForJavaObject(env, object));
     if (err != NO_ERROR) {
       signalExceptionForError(env, clazz, err);
@@ -1374,22 +1374,22 @@ static void android_os_Parcel_writeStrongBinder(JNIEnv* env, jclass clazz, jlong
 #### 2.1.4.1 ibinderForJavaObject
 ```c++
 // android_os_Parcel.cpp
-// obj = ActivityManagerService对象
+// obj = ActivityManagerService 对象
 sp<IBinder> ibinderForJavaObject(JNIEnv* env, jobject obj)
 {
   if (obj == NULL) return NULL;
 
-  // 由于ActivityManagerService继承Binder对象，进入该分支
+  // 由于 ActivityManagerService 继承 Binder 对象，进入该分支
   if (env->IsInstanceOf(obj, gBinderOffsets.mClass)) {
-     // Java端的Binder对象会持有一个mObject字段，指向
-    // native端的JavaBBinderHolder对象，见2.1.4.1.1
+     // Java 端的 Binder 对象会持有一个 mObject 字段，指向
+    // native 端的 JavaBBinderHolder 对象，见 2.1.4.1.1
     JavaBBinderHolder* jbh = (JavaBBinderHolder*)
       env->GetLongField(obj, gBinderOffsets.mObject);
-    // jbh->get返回的是一个JavaBBinder对象，见2.1.4.1.2
+    // jbh->get 返回的是一个 JavaBBinder 对象，见 2.1.4.1.2
     return jbh != NULL ? jbh->get(env, obj) : NULL;
   }
 
-  // 对于非服务类，则继承BinderProxy，前面已经讲过
+  // 对于非服务类，则继承 BinderProxy，前面已经讲过
   if (env->IsInstanceOf(obj, gBinderProxyOffsets.mClass)) {
     return (IBinder*)
       env->GetLongField(obj, gBinderProxyOffsets.mObject);
@@ -1399,10 +1399,10 @@ sp<IBinder> ibinderForJavaObject(JNIEnv* env, jobject obj)
   return NULL;
 }
 ```
-最终返回一个JavaBBinder对象，其mObject字段引用ActivityManagerService对象。
+最终返回一个 JavaBBinder 对象，其 mObject 字段引用 ActivityManagerService 对象。
 
 ##### 2.1.4.1.1 android_os_Binder_init
-ActivityManagerService继承Binder类。Java端Binder类的构造方法会调用一个native方法init，在该native方法中会创建一个JavaBBinderHolder的native对象，并将其地址赋给Java对象的mObject字段。
+ActivityManagerService 继承 Binder 类。Java 端 Binder 类的构造方法会调用一个 native 方法 init，在该 native 方法中会创建一个 JavaBBinderHolder 的 native 对象，并将其地址赋给 Java 对象的 mObject 字段。
 ```c++
 // android_util_Binder.cpp
 static void android_os_Binder_init(JNIEnv* env, jobject obj)
@@ -1423,11 +1423,11 @@ static void android_os_Binder_init(JNIEnv* env, jobject obj)
 
 wp<JavaBBinder> mBinder;
 
-// obj = ActivityManagerService对象
+// obj = ActivityManagerService 对象
 sp<JavaBBinder> get(JNIEnv* env, jobject obj)
 {
   AutoMutex _l(mLock);
-  // mBinder是一个弱引用，第一次调用返回NULL
+  // mBinder 是一个弱引用，第一次调用返回 NULL
   sp<JavaBBinder> b = mBinder.promote();
   if (b == NULL) {
     b = new JavaBBinder(env, obj);
@@ -1437,22 +1437,22 @@ sp<JavaBBinder> get(JNIEnv* env, jobject obj)
   return b;
 }
 ```
-这里创建一个JavaBBinder对象，保存ActivityManagerService对象到mObject字段中。
+这里创建一个 JavaBBinder 对象，保存 ActivityManagerService 对象到 mObject 字段中。
 
 #### 2.1.4.2 Parcel#writeStrongBinder
 ```c++
 // Parcel.cpp
-// val = JavaBBinder对象
+// val = JavaBBinder 对象
 status_t Parcel::writeStrongBinder(const sp<IBinder>& val)
 {
- // 见2.1.4.2.1
+ // 见 2.1.4.2.1
   return flatten_binder(ProcessState::self(), val, this);
 }
 ```
 ##### 2.1.4.2.1 Parcel#flatten_binder
 ```c++
 // Parcel.cpp
-// binder = JavaBBinder对象
+// binder = JavaBBinder 对象
 status_t flatten_binder(const sp<ProcessState>& /*proc*/,
     const sp<IBinder>& binder, Parcel* out)
 {
@@ -1460,7 +1460,7 @@ status_t flatten_binder(const sp<ProcessState>& /*proc*/,
 
   obj.flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS;
   if (binder != NULL) {
-    // JavaBBinder继承BBinder，所以localBinder返回自身
+    // JavaBBinder 继承 BBinder，所以 localBinder 返回自身
     IBinder *local = binder->localBinder();
     if (!local) {
       BpBinder *proxy = binder->remoteBinder();
@@ -1493,7 +1493,7 @@ inline static status_t finish_flatten_binder(
   return out->writeObject(flat, false);
 }
 ```
-如果binder是BBinder，那么它标识的服务提供方，obj.cookie保存的是指向该binder的实际指针；如果binder是Bpinder，那么它标识的服务使用方，obj.handle保存的实际Binder在驱动中的一个引用。
+如果 binder 是 BBinder，那么它标识的服务提供方，obj.cookie 保存的是指向该 binder 的实际指针；如果 binder 是 Bpinder，那么它标识的服务使用方，obj.handle 保存的实际 Binder 在驱动中的一个引用。
 ```c++
 // Parcel.cpp
 /*
@@ -1501,7 +1501,7 @@ val = {
  flags = 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS,
  type: BINDER_TYPE_BINDER,
  binder: 弱引用,
- cookie: 指向Binder对象指针,
+ cookie: 指向 Binder 对象指针,
 }
 nullMetaData = false
 */
@@ -1514,7 +1514,7 @@ status_t Parcel::writeObject(const flat_binder_object& val, bool nullMetaData)
     *reinterpret_cast<flat_binder_object*>(mData+mDataPos) = val;
     ...
     if (nullMetaData || val.binder != 0) {
-      // 记录flat_binder_object的在buffer中的位置
+      // 记录 flat_binder_object 的在 buffer 中的位置
       mObjects[mObjectsSize] = mDataPos;
       acquire_object(ProcessState::self(), val, this, &mOpenAshmemSize);
       mObjectsSize++;
@@ -1533,13 +1533,13 @@ status_t Parcel::writeObject(const flat_binder_object& val, bool nullMetaData)
   goto restart_write;
 }
 ```
-如果空间不够则增大空间，并将val写入到Parcel中，同时记录了val在buffer中的位置，后面在binder驱动中会进行修改。
+如果空间不够则增大空间，并将 val 写入到 Parcel 中，同时记录了 val 在 buffer 中的位置，后面在 binder 驱动中会进行修改。
 
 ### 2.1.5 BinderProxy#transact
 ```java
 // Binder.java
 // code = IServiceManager.ADD_SERVICE_TRANSACTION
-// data = 见2.1.2注释
+// data = 见 2.1.2 注释
 // flags = 0
 public boolean transact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
   Binder.checkParcel(this, code, data, "Unreasonably large binder buffer");
@@ -1550,7 +1550,7 @@ public boolean transact(int code, Parcel data, Parcel reply, int flags) throws R
 ```c++
 // android_util_Binder.cpp
 // code =  IServiceManager.ADD_SERVICE_TRANSACTION
-// dataObj = 写入的Parcel，见2.1.2注释
+// dataObj = 写入的 Parcel，见 2.1.2 注释
 // flags = 0
 static jboolean android_os_BinderProxy_transact(JNIEnv* env, jobject obj,
         jint code, jobject dataObj, jobject replyObj, jint flags) // throws RemoteException
@@ -1559,7 +1559,7 @@ static jboolean android_os_BinderProxy_transact(JNIEnv* env, jobject obj,
     jniThrowNullPointerException(env, NULL);
     return JNI_FALSE;
   }
-  // 从Java对象中取出native对象
+  // 从 Java 对象中取出 native 对象
   Parcel* data = parcelForJavaObject(env, dataObj);
   if (data == NULL) {
     return JNI_FALSE;
@@ -1577,7 +1577,7 @@ static jboolean android_os_BinderProxy_transact(JNIEnv* env, jobject obj,
     return JNI_FALSE;
   }
   ...
- // 见2.1.5.2
+ // 见 2.1.5.2
   status_t err = target->transact(code, *data, reply, flags);
   ...
   if (err == NO_ERROR) {
@@ -1594,14 +1594,14 @@ static jboolean android_os_BinderProxy_transact(JNIEnv* env, jobject obj,
 ```c++
 // BpBinder.cpp
 // code =  IServiceManager.ADD_SERVICE_TRANSACTION
-// data = 写入的Parcel，见2.1.2注释
-// reply = 待写入的Parcel
+// data = 写入的 Parcel，见 2.1.2 注释
+// reply = 待写入的 Parcel
 // flags = 0
 status_t BpBinder::transact(
     uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags)
 {
   if (mAlive) {
-  // 见2.2
+  // 见 2.2
     status_t status = IPCThreadState::self()->transact(
       mHandle, code, data, reply, flags);
     if (status == DEAD_OBJECT) mAlive = 0;
@@ -1611,15 +1611,15 @@ status_t BpBinder::transact(
   return DEAD_OBJECT;
 }
 ```
-IPCThreadState为每个线程维护了一个实例，通过IPCThreadState::self()获取。在IPCThreadState初始化时，会将ProcessState的进程单例保存到mProcess字段中。
+IPCThreadState 为每个线程维护了一个实例，通过 IPCThreadState::self() 获取。在 IPCThreadState 初始化时，会将 ProcessState 的进程单例保存到 mProcess 字段中。
 
 ## 2.2 IPCThreadState#transact
 ```c++
 // IPCThreadState.cpp
 // handle = 0
 // code =  IServiceManager.ADD_SERVICE_TRANSACTION
-// data = 写入的Parcel，见2.1.2注释
-// reply = 待写入的Parcel
+// data = 写入的 Parcel，见 2.1.2 注释
+// reply = 待写入的 Parcel
 // flags = 0
 status_t IPCThreadState::transact(int32_t handle,
                                   uint32_t code, const Parcel& data,
@@ -1627,15 +1627,15 @@ status_t IPCThreadState::transact(int32_t handle,
 {
   flags |= TF_ACCEPT_FDS;
  if (err == NO_ERROR) {
-    // 见2.2.1
+    // 见 2.2.1
     err = writeTransactionData(BC_TRANSACTION, flags, handle, code, data, NULL);
  } 
   ...
  // 不是非阻塞模式，进入该分支
   if ((flags & TF_ONE_WAY) == 0) {
-    // reply不为NULL
+    // reply 不为 NULL
     if (reply) {
-      // 见2.2.2   
+      // 见 2.2.2   
       err = waitForResponse(reply);
     } else {
       Parcel fakeReply;
@@ -1656,7 +1656,7 @@ status_t IPCThreadState::transact(int32_t handle,
 // binderFlags = TF_ACCEPT_FDS
 // handle = 0
 // code = IServiceManager.ADD_SERVICE_TRANSACTION
-// data = 写入的Parcel，见2.1.2注释
+// data = 写入的 Parcel，见 2.1.2 注释
 // statusBuffer = null
 status_t IPCThreadState::writeTransactionData(int32_t cmd, uint32_t binderFlags,
     int32_t handle, uint32_t code, const Parcel& data, status_t* statusBuffer)
@@ -1676,9 +1676,9 @@ status_t IPCThreadState::writeTransactionData(int32_t cmd, uint32_t binderFlags,
   if (err == NO_ERROR) {
     tr.data_size = data.ipcDataSize();
     tr.data.ptr.buffer = data.ipcData();
-    // 存储binder对象位置的数组字节大小
+    // 存储 binder 对象位置的数组字节大小
     tr.offsets_size = data.ipcObjectsCount()*sizeof(binder_size_t);
-  // binder对象的对象位置的数组
+  // binder 对象的对象位置的数组
     tr.data.ptr.offsets = data.ipcObjects();
   } else if (statusBuffer) {
     tr.flags |= TF_STATUS_CODE;
@@ -1690,7 +1690,7 @@ status_t IPCThreadState::writeTransactionData(int32_t cmd, uint32_t binderFlags,
   } else {
     return (mLastError = err);
   }
-  // mOut是发给binder驱动的数据  
+  // mOut 是发给 binder 驱动的数据  
   mOut.writeInt32(cmd);
   mOut.write(&tr, sizeof(tr));
   
@@ -1706,19 +1706,19 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
   int32_t err;
 
   while (1) {
-  // 见2.2.3
+  // 见 2.2.3
     if ((err=talkWithDriver()) < NO_ERROR) break;
     if (mIn.dataAvail() == 0) continue;
     cmd = (uint32_t)mIn.readInt32();
     switch (cmd) {
-    // 第二个指令BR_TRANSACTION_COMPLETE  
+    // 第二个指令 BR_TRANSACTION_COMPLETE  
     case BR_TRANSACTION_COMPLETE:
       if (!reply && !acquireResult) goto finish;
-      // 跳出switch，继续循环
+      // 跳出 switch，继续循环
       break;
       ...
     default:
-      // 第一个指令BR_NOOP，executeCommand不会进行任何操作
+      // 第一个指令 BR_NOOP，executeCommand 不会进行任何操作
       err = executeCommand(cmd);
       if (err != NO_ERROR) goto finish;
       break;
@@ -1728,13 +1728,13 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
   return err;
 }
 ```
-执行过程为调用talkWithDriver，向驱动发送数据，然后读取驱动写入的数据，根据cmd进行操作。
+执行过程为调用 talkWithDriver，向驱动发送数据，然后读取驱动写入的数据，根据 cmd 进行操作。
 
-第一次talkWithDriver结束后，mIn被驱动写入两个整数：BR_NOOP和BR_TRANSACTION_COMPLETE。
+第一次 talkWithDriver 结束后，mIn 被驱动写入两个整数：BR_NOOP 和 BR_TRANSACTION_COMPLETE。
 
-BR_NOOP不会执行任何操作，BR_TRANSACTION_COMPLETE分支执行后继续循环。于是第二次调用talkWithDriver。
+BR_NOOP 不会执行任何操作，BR_TRANSACTION_COMPLETE 分支执行后继续循环。于是第二次调用 talkWithDriver。
 
-这一次write_size为0，read_size不为0。再次发起系统调用见2.2.8。
+这一次 write_size 为 0，read_size 不为 0。再次发起系统调用见 2.2.8。
 
 ### 2.2.3 talkWithDriver
 ```c++
@@ -1742,7 +1742,7 @@ BR_NOOP不会执行任何操作，BR_TRANSACTION_COMPLETE分支执行后继续�
 // doReceive = true
 status_t IPCThreadState::talkWithDriver(bool doReceive)
 {
-  // mProcess即为ProcessState
+  // mProcess 即为 ProcessState
   if (mProcess->mDriverFD <= 0) {
     return -EBADF;
   }
@@ -1750,8 +1750,8 @@ status_t IPCThreadState::talkWithDriver(bool doReceive)
   binder_write_read bwr;
   
   // Is the read buffer empty?
-  // 如果为true说明驱动写入的数据已经读取完了，或者根本就没数据
-  // 当前情况为true
+  // 如果为 true 说明驱动写入的数据已经读取完了，或者根本就没数据
+  // 当前情况为 true
   const bool needRead = mIn.dataPosition() >= mIn.dataSize();
   
   // outAvail = mOut.dataSize()
@@ -1762,7 +1762,7 @@ status_t IPCThreadState::talkWithDriver(bool doReceive)
 
   // This is what we'll read.
   if (doReceive && needRead) {
-    // 初始化IPCThreadState时，mIn和mOut容量都为256
+    // 初始化 IPCThreadState 时，mIn 和 mOut 容量都为 256
     bwr.read_size = mIn.dataCapacity();
     bwr.read_buffer = (uintptr_t)mIn.data();
   } else {
@@ -1777,7 +1777,7 @@ status_t IPCThreadState::talkWithDriver(bool doReceive)
   bwr.read_consumed = 0;
   status_t err;
   do {
-    // 系统调用，见2.2.4
+    // 系统调用，见 2.2.4
     if (ioctl(mProcess->mDriverFD, BINDER_WRITE_READ, &bwr) >= 0)
       err = NO_ERROR;
     else
@@ -1794,7 +1794,7 @@ status_t IPCThreadState::talkWithDriver(bool doReceive)
     }
     // 8
     if (bwr.read_consumed > 0) {
-      // 当读完后，position就和size相同了，发起第二次talkWithDriver时needRead就为true
+      // 当读完后，position 就和 size 相同了，发起第二次 talkWithDriver 时 needRead 就为 true
       mIn.setDataSize(bwr.read_consumed);
       mIn.setDataPosition(0);
     }
@@ -1804,18 +1804,18 @@ status_t IPCThreadState::talkWithDriver(bool doReceive)
   return err;
 }
 ```
-发起系统调用，从2.2.7系统调用返回后，write_buffer全部消耗完，read_buffer中写入两个整数，BR_NOOP和BR_TRANSACTION_COMPLETE。接着返回到2.2.2 waitForResponse。
+发起系统调用，从 2.2.7 系统调用返回后，write_buffer 全部消耗完，read_buffer 中写入两个整数，BR_NOOP 和 BR_TRANSACTION_COMPLETE。接着返回到 2.2.2 waitForResponse。
 
 ### 2.2.4 binder_ioctl
 ```c++
 // kernel/drivers/android/binder.c
 /*
 cmd = BINDER_WRITE_READ
-arg = 指向用户空间的binder_write_read结构体：
+arg = 指向用户空间的 binder_write_read 结构体：
 {
-  write_size: write_buffer大小,
+  write_size: write_buffer 大小,
   write_consumed: 0,
-  write_buffer: [BC_TRANSACTION, binder_transaction_data对象], // 见2.2.1
+  write_buffer: [BC_TRANSACTION, binder_transaction_data 对象], // 见 2.2.1
   read_size: 256,
   read_consumed: 0,
   read_buffer: 指向用户空间
@@ -1847,7 +1847,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
       ret = -EFAULT;
       goto err;
     }
-    // 不为0，见2.2.5
+    // 不为 0，见 2.2.5
     if (bwr.write_size > 0) {
       ret = binder_thread_write(proc, thread, (void __user *)bwr.write_buffer, bwr.write_size, &bwr.write_consumed);
       if (ret < 0) {
@@ -1857,7 +1857,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         goto err;
       }
     }
-    // 不为0，见2.2.7
+    // 不为 0，见 2.2.7
     if (bwr.read_size > 0) {
       ret = binder_thread_read(proc, thread, (void __user *)bwr.read_buffer, bwr.read_size, &bwr.read_consumed, filp->f_flags & O_NONBLOCK);
       if (!list_empty(&proc->todo))
@@ -1890,8 +1890,8 @@ err:
 ### 2.2.5 binder_thread_write
 ```c++
 // kernel/drivers/android/binder.c
-// *buffer = [BC_TRANSACTION, binder_transaction_data对象]// 见2.2.1
-// size = buffer大小
+// *buffer = [BC_TRANSACTION, binder_transaction_data 对象]// 见 2.2.1
+// size = buffer 大小
 // *consumed = 0
 int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
       void __user *buffer, int size, signed long *consumed)
@@ -1901,7 +1901,7 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
   void __user *end = buffer + size;
 
   while (ptr < end && thread->return_error == BR_OK) {
-    //取出cmd为BC_TRANSACTION
+    //取出 cmd 为 BC_TRANSACTION
     if (get_user(cmd, (uint32_t __user *)ptr))
       return -EFAULT;
     ptr += sizeof(uint32_t);
@@ -1913,15 +1913,15 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
       // 从用户空间取出数据，浅拷贝，数据中的指针仍指向用户空间
       if (copy_from_user(&tr, ptr, sizeof(tr)))
         return -EFAULT;
-      // ptr将指向buffer的末尾        
+      // ptr 将指向 buffer 的末尾        
       ptr += sizeof(tr);
-      // 见2.2.6      
+      // 见 2.2.6      
       binder_transaction(proc, thread, &tr, cmd == BC_REPLY);
       break;
     ...
     }
     }
-    // 数据全部消耗，*consumed等于buffer所指向数据的大小
+    // 数据全部消耗，*consumed 等于 buffer 所指向数据的大小
     *consumed = ptr - buffer;
   }
   return 0;
@@ -1931,7 +1931,7 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
 ### 2.2.6 binder_transaction
 ```c++
 // kernel/drivers/android/binder.c
-// tr = 指向binder_transaction_data对象 // 见2.2.1
+// tr = 指向 binder_transaction_data 对象 // 见 2.2.1
 // reply = false
 static void binder_transaction(struct binder_proc *proc,
              struct binder_thread *thread,
@@ -1955,14 +1955,14 @@ static void binder_transaction(struct binder_proc *proc,
     if (tr->target.handle) {
       ...
     } else {
-      // 第1阶段已经介绍了
+      // 第 1 阶段已经介绍了
       target_node = binder_context_mgr_node;
       if (target_node == NULL) {
         return_error = BR_DEAD_REPLY;
         goto err_no_context_mgr_node;
       }
     }
-    // Service Manager进程的proc
+    // Service Manager 进程的 proc
     target_proc = target_node->proc;
     if (target_proc == NULL) {
       return_error = BR_DEAD_REPLY;
@@ -1978,7 +1978,7 @@ static void binder_transaction(struct binder_proc *proc,
       ...
     }
   }
-  // target_thread = null，没有指定线程，那么后续操作的是目标进程的todo  
+  // target_thread = null，没有指定线程，那么后续操作的是目标进程的 todo  
   if (target_thread) {
     target_list = &target_thread->todo;
     target_wait = &target_thread->wait;
@@ -1988,7 +1988,7 @@ static void binder_transaction(struct binder_proc *proc,
   }
 
   /* TODO: reuse incoming transaction for reply */
-  // 为当前的binder事务分配内存
+  // 为当前的 binder 事务分配内存
   t = kzalloc(sizeof(*t), GFP_KERNEL);
   if (t == NULL) {
     return_error = BR_FAILED_REPLY;
@@ -2012,7 +2012,7 @@ static void binder_transaction(struct binder_proc *proc,
   else
     t->from = NULL;
   t->sender_euid = proc->tsk->cred->euid;
-  // Service Manager的proc
+  // Service Manager 的 proc
   t->to_proc = target_proc;
   // null
   t->to_thread = target_thread;
@@ -2021,8 +2021,8 @@ static void binder_transaction(struct binder_proc *proc,
   // TF_ACCEPT_FDS
   t->flags = tr->flags;
   t->priority = task_nice(current);
-  // 分配内存，准备将tr->data.ptr->buffer和tr->data.ptr.offsets
-  // 指向的用户数据取出来，见2.2.6.1
+  // 分配内存，准备将 tr->data.ptr->buffer 和 tr->data.ptr.offsets
+  // 指向的用户数据取出来，见 2.2.6.1
   t->buffer = binder_alloc_buf(target_proc, tr->data_size,
     tr->offsets_size, !reply && (t->flags & TF_ONE_WAY));
   if (t->buffer == NULL) {
@@ -2036,13 +2036,13 @@ static void binder_transaction(struct binder_proc *proc,
   if (target_node)
     // 增加引用计数???  
     binder_inc_node(target_node, 1, 0, NULL);
-  // buffer存储了两部分数据，这里计算存储offsets的起始地址
+  // buffer 存储了两部分数据，这里计算存储 offsets 的起始地址
   offp = (size_t *)(t->buffer->data + ALIGN(tr->data_size, sizeof(void *)));
-  // 将buffer数据取出，具体内容见2.1.2注释
+  // 将 buffer 数据取出，具体内容见 2.1.2 注释
   if (copy_from_user(t->buffer->data, tr->data.ptr.buffer, tr->data_size)) {
     ...
   }
-  // 将buffer中所包含的Binder对象位置信息数组offsets取出
+  // 将 buffer 中所包含的 Binder 对象位置信息数组 offsets 取出
   if (copy_from_user(offp, tr->data.ptr.offsets, tr->offsets_size)) {
     ...
   }
@@ -2053,7 +2053,7 @@ static void binder_transaction(struct binder_proc *proc,
     return_error = BR_FAILED_REPLY;
     goto err_bad_offset;
   }
-  // 指向offsets的末尾，也是整个buffer的末尾  
+  // 指向 offsets 的末尾，也是整个 buffer 的末尾  
   off_end = (void *)offp + tr->offsets_size;
   for (; offp < off_end; offp++) {
     struct flat_binder_object *fp;
@@ -2066,24 +2066,24 @@ static void binder_transaction(struct binder_proc *proc,
       return_error = BR_FAILED_REPLY;
       goto err_bad_offset;
     }
-    // 取出Binder对象，即起始位置加上一个偏移，这里只有一个对象，内容为：
+    // 取出 Binder 对象，即起始位置加上一个偏移，这里只有一个对象，内容为：
     // {
     //   flags: 0x7f | FLAT_BINDER_FLAG_ACCEPTS_FDS,
     //   type: BINDER_TYPE_BINDER,
     //   binder: 弱引用,
-    //   cookie: 指向Binder对象指针,
+    //   cookie: 指向 Binder 对象指针,
     // }
     fp = (struct flat_binder_object *)(t->buffer->data + *offp);
     switch (fp->type) {
     case BINDER_TYPE_BINDER:
     case BINDER_TYPE_WEAK_BINDER: {
       struct binder_ref *ref;
-      // 每个进程都在proc的nodes字段中维护当前进程的binder_node，binder_node
-      // 保存了Service的信息，例如地址。驱动会将一个binder_node的引用传递给其他
+      // 每个进程都在 proc 的 nodes 字段中维护当前进程的 binder_node，binder_node
+      // 保存了 Service 的信息，例如地址。驱动会将一个 binder_node 的引用传递给其他
       // 进程。
       struct binder_node *node = binder_get_node(proc, fp->binder);
       if (node == NULL) {
-        // 没有查到则新建一个并插入到proc.nodes中，这里的fp->cookie便是AMS
+        // 没有查到则新建一个并插入到 proc.nodes 中，这里的 fp->cookie 便是 AMS
         // 在进程中的实际地址。
         node = binder_new_node(proc, fp->binder, fp->cookie);
         if (node == NULL) {
@@ -2102,13 +2102,13 @@ static void binder_transaction(struct binder_proc *proc,
         goto err_binder_get_ref_for_node_failed;
       }
       ...
-      // 为binder_node创建一个引用，见2.2.6.2
+      // 为 binder_node 创建一个引用，见 2.2.6.2
       ref = binder_get_ref_for_node(target_proc, node);
       if (ref == NULL) {
         return_error = BR_FAILED_REPLY;
         goto err_binder_get_ref_for_node_failed;
       }
-      // 将类型改为BINDER_TYPE_HANDLE，记住，其他进程持有的都是handle
+      // 将类型改为 BINDER_TYPE_HANDLE，记住，其他进程持有的都是 handle
       if (fp->type == BINDER_TYPE_BINDER)
         fp->type = BINDER_TYPE_HANDLE;
       else
@@ -2135,16 +2135,16 @@ static void binder_transaction(struct binder_proc *proc,
   // 将标识写完成的工作添加到当前线程的任务列表中
   tcomplete->type = BINDER_WORK_TRANSACTION_COMPLETE;
   list_add_tail(&tcomplete->entry, &thread->todo);
-  // 唤醒Service Manager
+  // 唤醒 Service Manager
   if (target_wait)
-    // 见2.3
+    // 见 2.3
     wake_up_interruptible(target_wait);
   return;
   ...// 错误处理
 }
 ```
 
-唤醒目标线程后，继续返回到2.2.4 binder_ioctl，由于bwr.read_size不为0，进入2.2.7。ServiceManager线程在被唤醒后的执行见2.3。
+唤醒目标线程后，继续返回到 2.2.4 binder_ioctl，由于 bwr.read_size 不为 0，进入 2.2.7。ServiceManager 线程在被唤醒后的执行见 2.3。
 
 #### 2.2.6.1 binder_alloc_buf
 #### 2.2.6.2 binder_get_ref_for_node
@@ -2154,18 +2154,18 @@ static void binder_transaction(struct binder_proc *proc,
 ```c++
 if (bwr.read_size > 0) {
   ret = binder_thread_read(proc, thread, (void __user *)bwr.read_buffer, bwr.read_size, &bwr.read_consumed, filp->f_flags & O_NONBLOCK);
-  // 内容为空，此时thread->todo不为空
+  // 内容为空，此时 thread->todo 不为空
   if (!list_empty(&proc->todo))
     wake_up_interruptible(&proc->wait);
   if (ret < 0) {
-    // 将数据读写情况返回给请求方，此时write buffer全部读完，
+    // 将数据读写情况返回给请求方，此时 write buffer 全部读完，
     if (copy_to_user(ubuf, &bwr, sizeof(bwr)))
       ret = -EFAULT;
     goto err;
   }
 }
 
-// buffer = 指向内存的大小为256字节
+// buffer = 指向内存的大小为 256 字节
 // size = 256
 // non_block = 0
 static int binder_thread_read(struct binder_proc *proc,
@@ -2180,15 +2180,15 @@ static int binder_thread_read(struct binder_proc *proc,
   int wait_for_proc_work;
 
   if (*consumed == 0) {
-    // 写入BR_NOOP
+    // 写入 BR_NOOP
     if (put_user(BR_NOOP, (uint32_t __user *)ptr))
       return -EFAULT;
     ptr += sizeof(uint32_t);
   }
 
 retry:
-  // thread->transaction_stack不为NULL
-  // thread->todo也不为空
+  // thread->transaction_stack 不为 NULL
+  // thread->todo 也不为空
   // wait_for_proc_work = false
   wait_for_proc_work = thread->transaction_stack == NULL &&
         list_empty(&thread->todo);
@@ -2205,7 +2205,7 @@ retry:
       if (!binder_has_thread_work(thread))
         ret = -EAGAIN;
     } else
-      // 走这里，但是当前线程有任务，binder_has_thread_work执行为true，继续往下执行
+      // 走这里，但是当前线程有任务，binder_has_thread_work 执行为 true，继续往下执行
       ret = wait_event_interruptible(thread->wait, binder_has_thread_work(thread));
   }
   mutex_lock(&binder_lock);
@@ -2223,20 +2223,20 @@ retry:
     struct binder_transaction *t = NULL;
 
     if (!list_empty(&thread->todo))
-      // 第一次循环走这里，取出任务，类型为BINDER_WORK_TRANSACTION_COMPLETE
+      // 第一次循环走这里，取出任务，类型为 BINDER_WORK_TRANSACTION_COMPLETE
       w = list_first_entry(&thread->todo, struct binder_work, entry);
     else if (!list_empty(&proc->todo) && wait_for_proc_work)
       w = list_first_entry(&proc->todo, struct binder_work, entry);
     else {
-      // 第二次循环走这里，由于thread->looper & BINDER_LOOPER_STATE_NEED_RETURN为1，
-      // 直接break。
-      // 只有在ioctl出错时，thread->looper & BINDER_LOOPER_STATE_NEED_RETURN才为0。
+      // 第二次循环走这里，由于 thread->looper & BINDER_LOOPER_STATE_NEED_RETURN 为 1，
+      // 直接 break。
+      // 只有在 ioctl 出错时，thread->looper & BINDER_LOOPER_STATE_NEED_RETURN 才为 0。
       if (ptr - buffer == 4 && !(thread->looper & BINDER_LOOPER_STATE_NEED_RETURN)) /* no data added */
         goto retry;
       break;
     }
 
-    // 一共256，只写了4个字节，还够，往下执行
+    // 一共 256，只写了 4 个字节，还够，往下执行
     if (end - ptr < sizeof(tr) + 4)
       break;
 
@@ -2260,26 +2260,26 @@ retry:
     ...
     }
 
-    // t为NULL，不往下执行，继续循环
+    // t 为 NULL，不往下执行，继续循环
     if (!t)
       continue;
     ...
   }
 
 done:
-  // 第二次循环跳出后记下数据写入情况，一共写入两个整数：BR_NOOP和BR_TRANSACTION_COMPLETE
+  // 第二次循环跳出后记下数据写入情况，一共写入两个整数：BR_NOOP 和 BR_TRANSACTION_COMPLETE
   *consumed = ptr - buffer;
   ...
   return 0;
 }
 ```
-经过两次循环后，退出icotl，最终返回到2.2.3 talkWithDriver，处理数据读写情况：
+经过两次循环后，退出 icotl，最终返回到 2.2.3 talkWithDriver，处理数据读写情况：
 
-### 2.2.8 第二次binder_thread_read
-由于第二次iotcl，write size为0，read size不为0，于是再次进入binder_thread_read。
+### 2.2.8 第二次 binder_thread_read
+由于第二次 iotcl，write size 为 0，read size 不为 0，于是再次进入 binder_thread_read。
 
 ```c++
-// buffer = 指向内存的大小为256字节
+// buffer = 指向内存的大小为 256 字节
 // size = 256
 // *consumed = 0
 // non_block = 0
@@ -2295,15 +2295,15 @@ static int binder_thread_read(struct binder_proc *proc,
   int wait_for_proc_work;
 
   if (*consumed == 0) {
-    // 写入BR_NOOP
+    // 写入 BR_NOOP
     if (put_user(BR_NOOP, (uint32_t __user *)ptr))
       return -EFAULT;
     ptr += sizeof(uint32_t);
   }
 
 retry:
-  // thread->transaction_stack不为NULL
-  // thread->todo为空
+  // thread->transaction_stack 不为 NULL
+  // thread->todo 为空
   // wait_for_proc_work = false
   wait_for_proc_work = thread->transaction_stack == NULL &&
         list_empty(&thread->todo);
@@ -2320,17 +2320,17 @@ retry:
       if (!binder_has_thread_work(thread))
         ret = -EAGAIN;
     } else
-      // 阻塞在这里，等待ServiceManager
+      // 阻塞在这里，等待 ServiceManager
       ret = wait_event_interruptible(thread->wait, binder_has_thread_work(thread));
   }
  ...
 }
 ```
-由于事务栈不为空，且待处理任务为空，于是阻塞，等待ServiceManager唤醒。
+由于事务栈不为空，且待处理任务为空，于是阻塞，等待 ServiceManager 唤醒。
 
-## 2.3 ServiceManager唤醒后执行过程
+## 2.3 ServiceManager 唤醒后执行过程
 ```c++
-// buffer = 指向用户空间的4字节数组
+// buffer = 指向用户空间的 4 字节数组
 // size = 32 * 4
 // *consumed = 0
 // non_block = 0
@@ -2346,7 +2346,7 @@ static int binder_thread_read(struct binder_proc *proc,
   int wait_for_proc_work;
 
   if (*consumed == 0) {
-    // 写入BR_NOOP
+    // 写入 BR_NOOP
     if (put_user(BR_NOOP, (uint32_t __user *)ptr))
       return -EFAULT;
     ptr += sizeof(uint32_t);
@@ -2365,14 +2365,14 @@ retry:
     if (non_block) {
       ...
     } else
-      // 从这里唤醒，binder_has_proc_work返回为true，继续往下执行
+      // 从这里唤醒，binder_has_proc_work 返回为 true，继续往下执行
       ret = wait_event_interruptible_exclusive(proc->wait, binder_has_proc_work(proc, thread));
   } else {
     ...
   }
   mutex_lock(&binder_lock);
   if (wait_for_proc_work)
-    // 可用线程减1
+    // 可用线程减 1
     proc->ready_threads--;
   thread->looper &= ~BINDER_LOOPER_STATE_WAITING;
 
@@ -2384,11 +2384,11 @@ retry:
     struct binder_transaction_data tr;
     struct binder_work *w;
     struct binder_transaction *t = NULL;
-    // thread->todo为空
+    // thread->todo 为空
     if (!list_empty(&thread->todo))
       w = list_first_entry(&thread->todo, struct binder_work, entry);
     else if (!list_empty(&proc->todo) && wait_for_proc_work)
-      // 取出2.2.6中添加的work，type为BINDER_WORK_TRANSACTION
+      // 取出 2.2.6 中添加的 work，type 为 BINDER_WORK_TRANSACTION
       w = list_first_entry(&proc->todo, struct binder_work, entry);
     else {
       ...
@@ -2410,7 +2410,7 @@ retry:
     if (t->buffer->target_node) {
       struct binder_node *target_node = t->buffer->target_node;
       tr.target.ptr = target_node->ptr;
-      tr.cookie =  target_node->cookie; //Service Manger的实际地址
+      tr.cookie =  target_node->cookie; //Service Manger 的实际地址
       t->saved_priority = task_nice(current);
       if (t->priority < target_node->min_priority &&
           !(t->flags & TF_ONE_WAY))
@@ -2418,7 +2418,7 @@ retry:
       else if (!(t->flags & TF_ONE_WAY) ||
          t->saved_priority > target_node->min_priority)
         binder_set_nice(target_node->min_priority);
-      // 设置cmd为BR_TRANSACTION
+      // 设置 cmd 为 BR_TRANSACTION
       cmd = BR_TRANSACTION;
     } else {
       tr.target.ptr = NULL;
@@ -2448,11 +2448,11 @@ retry:
           ALIGN(t->buffer->data_size,
               sizeof(void *));
 
-    // 将BR_TRANSACTION写入读buffer
+    // 将 BR_TRANSACTION 写入读 buffer
     if (put_user(cmd, (uint32_t __user *)ptr))
       return -EFAULT;
     ptr += sizeof(uint32_t);
-    // 将事务相关的信息写入读buffer
+    // 将事务相关的信息写入读 buffer
     if (copy_to_user(ptr, &tr, sizeof(tr)))
       return -EFAULT;
     ptr += sizeof(tr);
@@ -2461,7 +2461,7 @@ retry:
 
     // 任务已处理，删除工作任务
     list_del(&t->work.entry);
-    // ServiceManager处理完成后会通知驱动释放内存
+    // ServiceManager 处理完成后会通知驱动释放内存
     t->buffer->allow_user_free = 1;
     if (cmd == BR_TRANSACTION && !(t->flags & TF_ONE_WAY)) {
       // 把事务放置栈顶，稍后要据此反馈客户
@@ -2483,16 +2483,16 @@ done:
   return 0;
 }
 ```
-写入的读buffer数据包括[BR_NOOP, BR_TRANSACTION, binder_transaction_data]。
+写入的读 buffer 数据包括 [BR_NOOP, BR_TRANSACTION, binder_transaction_data]。
 
-接着返回到1.3 binder_loop中开始执行binder_parse，见2.3.1。
+接着返回到 1.3 binder_loop 中开始执行 binder_parse，见 2.3.1。
 
 ### 2.3.1 binder_parse
 ```c++
 // frameworks/native/cmds/servicemanager/binder.c
-// bs = binder_open的返回值
-// ptr = 指向的数据包含[BR_NOOP, BR_TRANSACTION, binder_transaction_data]
-// size = ptr指向数据的大小
+// bs = binder_open 的返回值
+// ptr = 指向的数据包含 [BR_NOOP, BR_TRANSACTION, binder_transaction_data]
+// size = ptr 指向数据的大小
 // func = svcmgr_handler
 int binder_parse(struct binder_state *bs, struct binder_io *bio,
                  uintptr_t ptr, size_t size, binder_handler func)
@@ -2518,13 +2518,13 @@ int binder_parse(struct binder_state *bs, struct binder_io *bio,
                 struct binder_io msg;
                 struct binder_io reply;
                 int res;
-                // 见2.3.1.1
+                // 见 2.3.1.1
                 bio_init(&reply, rdata, sizeof(rdata), 4);
-                // 见2.3.1.2
+                // 见 2.3.1.2
                 bio_init_from_txn(&msg, txn);
-                // 见2.3.1.3
+                // 见 2.3.1.3
                 res = func(bs, txn, &msg, &reply);
-                // 见2.3.1.4
+                // 见 2.3.1.4
                 binder_send_reply(bs, &reply, txn->data.ptr.buffer, res);
             }
             ptr += sizeof(*txn);
@@ -2537,7 +2537,7 @@ int binder_parse(struct binder_state *bs, struct binder_io *bio,
     return r;
 }
 ```
-binder_io定义如下：
+binder_io 定义如下：
 ```c++
 struct binder_io
 {
@@ -2554,14 +2554,14 @@ struct binder_io
 ```
 #### 2.3.1.1 bio_init
 ```c++
-// bio = 指向binder_io结构体实例
+// bio = 指向 binder_io 结构体实例
 // data = 数组
 // maxdata = 256
-// maxoffs = 4 最多有多少个binder对象
+// maxoffs = 4 最多有多少个 binder 对象
 void bio_init(struct binder_io *bio, void *data,
               size_t maxdata, size_t maxoffs)
 {
-    // 对象偏移位置为4字节整数
+    // 对象偏移位置为 4 字节整数
     size_t n = maxoffs * sizeof(size_t);
 
     // 给的空间太小
@@ -2572,7 +2572,7 @@ void bio_init(struct binder_io *bio, void *data,
         return;
     }
     
-    // 整段buffer前面存储binder对象偏移位置信息，后面存储其他数据
+    // 整段 buffer 前面存储 binder 对象偏移位置信息，后面存储其他数据
     bio->data = bio->data0 = (char *) data + n;
     bio->offs = bio->offs0 = data;
     bio->data_avail = maxdata - n;
@@ -2583,7 +2583,7 @@ void bio_init(struct binder_io *bio, void *data,
 
 #### 2.3.1.2 bio_init_from_txn
 ```c++
-// bio = 指向binder_io结构体实例
+// bio = 指向 binder_io 结构体实例
 void bio_init_from_txn(struct binder_io *bio, struct binder_transaction_data *txn)
 {
     bio->data = bio->data0 = (char *)(intptr_t)txn->data.ptr.buffer;
@@ -2609,7 +2609,7 @@ int svcmgr_handler(struct binder_state *bs,
     uint32_t strict_policy;
     int allow_isolated;
 
-    // 都为0
+    // 都为 0
     if (txn->target.ptr != BINDER_SERVICE_MANAGER)
         return -1;
     // txn->code = IServiceManager.ADD_SERVICE_TRANSACTION
@@ -2641,18 +2641,18 @@ int svcmgr_handler(struct binder_state *bs,
         if (s == NULL) {
             return -1;
         }
-        // msg中找到flat_binder_object，取出其中的handle字段
+        // msg 中找到 flat_binder_object，取出其中的 handle 字段
         handle = bio_get_ref(msg);
         // allow_isolated = 1
         allow_isolated = bio_get_uint32(msg) ? 1 : 0;
-        // 将服务加入到service manager中，以s作为索引插入到链表中
+        // 将服务加入到 service manager 中，以 s 作为索引插入到链表中
         if (do_add_service(bs, s, len, handle, txn->sender_euid,
             allow_isolated, txn->sender_pid))
             return -1;
         break;
     }
 
-    // 将0写入到reply中
+    // 将 0 写入到 reply 中
     bio_put_uint32(reply, 0);
     return 0;
 }
@@ -2661,8 +2661,8 @@ int svcmgr_handler(struct binder_state *bs,
 #### 2.3.1.4 binder_send_reply
 ```c++
 // frameworks/native/cmds/servicemanager/binder.c
-// reply = 包含一个写入的整数0
-// buffer_to_free = 驱动为这次事务分配的buffer
+// reply = 包含一个写入的整数 0
+// buffer_to_free = 驱动为这次事务分配的 buffer
 // status = 0
 void binder_send_reply(struct binder_state *bs,
                        struct binder_io *reply,
@@ -2695,7 +2695,7 @@ void binder_send_reply(struct binder_state *bs,
 }
 
 // data = [BC_FREE_BUFFER, buffer_to_free, BC_REPLY, binder_transaction_data]
-// len = data的大小
+// len = data 的大小
 int binder_write(struct binder_state *bs, void *data, size_t len)
 {
     struct binder_write_read bwr;
@@ -2707,7 +2707,7 @@ int binder_write(struct binder_state *bs, void *data, size_t len)
     bwr.read_size = 0;
     bwr.read_consumed = 0;
     bwr.read_buffer = 0;
-    // 重新发起系统调用，见2.4
+    // 重新发起系统调用，见 2.4
     res = ioctl(bs->fd, BINDER_WRITE_READ, &bwr);
     if (res < 0) {
         fprintf(stderr,"binder_write: ioctl failed (%s)\n",
@@ -2716,8 +2716,8 @@ int binder_write(struct binder_state *bs, void *data, size_t len)
     return res;
 }
 ```
-## 2.4 Service Manager反馈
-Service Manager处理完成后，重新调用ioctl，一是释放内存，而是反馈结果。read_size为0，write_size不为0，直接进入binder_thread_write。
+## 2.4 Service Manager 反馈
+Service Manager 处理完成后，重新调用 ioctl，一是释放内存，而是反馈结果。read_size 为 0，write_size 不为 0，直接进入 binder_thread_write。
 ```c++
 // kernel/drivers/android/binder.c
 // buffer = [BC_FREE_BUFFER, buffer_to_free, BC_REPLY, binder_transaction_data]
@@ -2737,14 +2737,14 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
     ...
     switch (cmd) {
     ...
-    // 第一指令便是BC_FREE_BUFFER
+    // 第一指令便是 BC_FREE_BUFFER
     case BC_FREE_BUFFER: {
       void __user *data_ptr;
       struct binder_buffer *buffer;
       if (get_user(data_ptr, (void * __user *)ptr))
         return -EFAULT;
       ptr += sizeof(void *);
-      // 见2.4.1 
+      // 见 2.4.1 
       buffer = binder_buffer_lookup(proc, data_ptr);
       if (buffer == NULL) {
         binder_user_error("binder: %d:%d "
@@ -2752,7 +2752,7 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
           proc->pid, thread->pid, data_ptr);
         break;
       }
-      // ServiceManager唤醒后将其置为1
+      // ServiceManager 唤醒后将其置为 1
       if (!buffer->allow_user_free) {
         binder_user_error("binder: %d:%d "
           "BC_FREE_BUFFER u%p matched "
@@ -2768,21 +2768,21 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
       if (buffer->async_transaction && buffer->target_node) {
         ...
       }
-      // 见2.4.2
+      // 见 2.4.2
       binder_transaction_buffer_release(proc, buffer, NULL);
-      // 见2.4.3
+      // 见 2.4.3
       binder_free_buf(proc, buffer);
       break;
     }
 
     case BC_TRANSACTION:
-    // 第二个指令是BC_REPLY
+    // 第二个指令是 BC_REPLY
     case BC_REPLY: {
       struct binder_transaction_data tr;
       if (copy_from_user(&tr, ptr, sizeof(tr)))
         return -EFAULT;
       ptr += sizeof(tr);
-      // 见2.4.4
+      // 见 2.4.4
       binder_transaction(proc, thread, &tr, cmd == BC_REPLY);
       break;
     }
@@ -2795,7 +2795,7 @@ int binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
 ### 2.4.4 binder_transaction
 ```c++
 // kernel/drivers/android/binder.c
-// thread = ServiceManager所在的thread
+// thread = ServiceManager 所在的 thread
 // reply = 1
 static void binder_transaction(struct binder_proc *proc,
              struct binder_thread *thread,
@@ -2835,7 +2835,7 @@ static void binder_transaction(struct binder_proc *proc,
       ... // error stuff
       goto err_dead_binder;
     }
-    // 发起添加服务请求所在进程的proc
+    // 发起添加服务请求所在进程的 proc
     target_proc = target_thread->proc;
   } else {
     ...
@@ -2890,14 +2890,14 @@ static void binder_transaction(struct binder_proc *proc,
     binder_inc_node(target_node, 1, 0, NULL);
 
   offp = (size_t *)(t->buffer->data + ALIGN(tr->data_size, sizeof(void *)));
-  // 从用户空间将数据拷出来，只有一个整数0
+  // 从用户空间将数据拷出来，只有一个整数 0
   if (copy_from_user(t->buffer->data, tr->data.ptr.buffer, tr->data_size)) {
     binder_user_error("binder: %d:%d got transaction with invalid "
       "data ptr\n", proc->pid, thread->pid);
     return_error = BR_FAILED_REPLY;
     goto err_copy_data_failed;
   }
-  // 没有offsets
+  // 没有 offsets
   if (copy_from_user(offp, tr->data.ptr.offsets, tr->offsets_size)) {
     binder_user_error("binder: %d:%d got transaction with invalid "
       "offsets ptr\n", proc->pid, thread->pid);
@@ -2911,7 +2911,7 @@ static void binder_transaction(struct binder_proc *proc,
   }
   if (reply) {
     BUG_ON(t->buffer->async_transaction != 0);
-    // 见2.4.4.1
+    // 见 2.4.4.1
     binder_pop_transaction(target_thread, in_reply_to);
   } else if (!(t->flags & TF_ONE_WAY)) {
     ...
@@ -2929,9 +2929,9 @@ static void binder_transaction(struct binder_proc *proc,
 ... // 错误处理
 }
 ```
-由于这次系统调用的read_size为0，ServiceManager处里完成后，直接返回1.5 binder_loop中进行下一次循环，重新发起系统调用，这一次write_size为0，但read_size不为0，于是重新进入binder_thread_read。此时，thread->transaction_stack为空，thread->todo有一个类型为BINDER_WORK_TRANSACTION_COMPLETE的任务，于是向read_buffer中写入BR_NOOP和BR_TRANSACTION_COMPLETE。binder_parse不会对这两个指令做处理，于是又进入下一轮循环，再发起系统调用，write_size为0，read_size不为0，进入binder_thread_read，这一次，thread->transaction_stack和thread->todo都为空，于是就阻塞了，等待唤醒。
+由于这次系统调用的 read_size 为 0，ServiceManager 处里完成后，直接返回 1.5 binder_loop 中进行下一次循环，重新发起系统调用，这一次 write_size 为 0，但 read_size 不为 0，于是重新进入 binder_thread_read。此时，thread->transaction_stack 为空，thread->todo 有一个类型为 BINDER_WORK_TRANSACTION_COMPLETE 的任务，于是向 read_buffer 中写入 BR_NOOP 和 BR_TRANSACTION_COMPLETE。binder_parse 不会对这两个指令做处理，于是又进入下一轮循环，再发起系统调用，write_size 为 0，read_size 不为 0，进入 binder_thread_read，这一次，thread->transaction_stack 和 thread->todo 都为空，于是就阻塞了，等待唤醒。
 
-接下来看下目标线程被唤醒后的执行情况，见2.5。
+接下来看下目标线程被唤醒后的执行情况，见 2.5。
 
 #### 2.4.4.1 binder_pop_transaction
 ```c++
@@ -2956,7 +2956,7 @@ static void binder_pop_transaction(struct binder_thread *target_thread,
 还原发起添加服务请求线程的事务栈。
 
 ## 2.5 添加服务返回
-添加服务的线程在2.2.8中阻塞，在被ServiceManager唤醒后将继续往下执行。此时，线程事务栈被清空，线程todo列表中有一个类型为BINDER_WORK_TRANSACTION的任务。
+添加服务的线程在 2.2.8 中阻塞，在被 ServiceManager 唤醒后将继续往下执行。此时，线程事务栈被清空，线程 todo 列表中有一个类型为 BINDER_WORK_TRANSACTION 的任务。
 ```c++
 // kernel/drivers/android/binder.c
 static int binder_thread_read(struct binder_proc *proc,
@@ -3041,7 +3041,7 @@ retry:
       tr.sender_pid = 0;
     }
     
-    // data_size = 1，只有一个0
+    // data_size = 1，只有一个 0
     tr.data_size = t->buffer->data_size;
     // offsets_size = 0
     tr.offsets_size = t->buffer->offsets_size;
@@ -3076,7 +3076,7 @@ done:
   return 0;
 }
 ```
-执行完后，写入read_buffer两个指令BR_NOOP和BR_REPLY，然后返回到waitForResponse中，见2.5.1
+执行完后，写入 read_buffer 两个指令 BR_NOOP 和 BR_REPLY，然后返回到 waitForResponse 中，见 2.5.1
 
 ### 2.5.1 waitForResponse
 ```c++
@@ -3100,7 +3100,7 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
 
         if (reply) {
           if ((tr.flags & TF_STATUS_CODE) == 0) {
-            // 将返回的数据0写入到reply中，进入finish
+            // 将返回的数据 0 写入到 reply 中，进入 finish
             reply->ipcSetDataReference(
                 reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
                 tr.data_size,
@@ -3116,7 +3116,7 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
       }
       goto finish;
     default:
-      // 第一个指令BR_NOOP，executeCommand不会进行任何操作
+      // 第一个指令 BR_NOOP，executeCommand 不会进行任何操作
       err = executeCommand(cmd);
       if (err != NO_ERROR) goto finish;
       break;
@@ -3126,11 +3126,11 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
   return err;
 }
 ```
-将返回的数据0写入到reply中，进入finish，然后层层返回，添加Service流程执行结束。
+将返回的数据 0 写入到 reply 中，进入 finish，然后层层返回，添加 Service 流程执行结束。
 
-我们知道，Service Manger在处理完任务反馈时，先执行了一个指令BC_FREE_BUFFER来释放分配的内存，由于这里是直接返回，不再进行系统调用，那么问题来了，Service Manager反馈时内核分配的内存该如何清理呢？
+我们知道，Service Manger 在处理完任务反馈时，先执行了一个指令 BC_FREE_BUFFER 来释放分配的内存，由于这里是直接返回，不再进行系统调用，那么问题来了，Service Manager 反馈时内核分配的内存该如何清理呢？
 
-在调用ipcSetDataReference时，同时传入了一个清理方法freeBuffer，该方法最终会在Java端调用Parcel.recycle()时执行，下面看看它的实现：
+在调用 ipcSetDataReference 时，同时传入了一个清理方法 freeBuffer，该方法最终会在 Java 端调用 Parcel.recycle() 时执行，下面看看它的实现：
 ```c++
 void IPCThreadState::freeBuffer(Parcel* parcel, const uint8_t* data,
                                 size_t /*dataSize*/,
@@ -3144,21 +3144,21 @@ void IPCThreadState::freeBuffer(Parcel* parcel, const uint8_t* data,
     state->mOut.writePointer((uintptr_t)data);
 }
 ```
-这里往mOut中添加了一个BC_FREE_BUFFER指令，只能等待下一次该线程发起iotcl时通知驱动来清理了。
+这里往 mOut 中添加了一个 BC_FREE_BUFFER 指令，只能等待下一次该线程发起 iotcl 时通知驱动来清理了。
 
 ## 2.6 总结
 
 ### 2.6.1 调用流程
 
-调用方发起BC_TRANSACTION，将事务放到线程事务栈栈顶，并在线程todo中添加一个类型为BINDER_WORK_TRANSACTION_COMPLETE的任务，同时在目标线程（没有指定线程，便唤醒proc->wait，也即主线程）todo中添加一个类型为BINDER_WORK_TRANSACTION的任务，并唤醒目标线程。调用方然后开始read流程，处理并清除线程中的todo任务（BINDER_WORK_TRANSACTION_COMPLETE），返回命令BR_TRANSACTION_COMPLETE，然后重新进入read，阻塞，等待唤醒。
+调用方发起 BC_TRANSACTION，将事务放到线程事务栈栈顶，并在线程 todo 中添加一个类型为 BINDER_WORK_TRANSACTION_COMPLETE 的任务，同时在目标线程（没有指定线程，便唤醒 proc->wait，也即主线程）todo 中添加一个类型为 BINDER_WORK_TRANSACTION 的任务，并唤醒目标线程。调用方然后开始 read 流程，处理并清除线程中的 todo 任务（BINDER_WORK_TRANSACTION_COMPLETE），返回命令 BR_TRANSACTION_COMPLETE，然后重新进入 read，阻塞，等待唤醒。
 
-目标线程被唤醒后，处理并清除todo中的任务（BINDER_WORK_TRANSACTION），返回命令BR_TRANSACTION。处理完成调用方指定的工作后，反馈命令BC_FREE_BUFFER和BC_REPLY，前者用来释放上一阶段驱动分配的内存，后者开始反馈，往线程todo中添加一个类型为BINDER_WORK_TRANSACTION_COMPLETE的任务，同时清理调用方线程栈顶的事务，并往调用方线程todo中添加一个类型为BINDER_WORK_TRANSACTION的任务，然后唤醒调用方线程。目标线程接着开始read流程，处理并清除线程中的todo任务（BINDER_WORK_TRANSACTION_COMPLETE），返回命令BR_TRANSACTION_COMPLETE，然后重新进入read，阻塞，等待再次被唤醒。
+目标线程被唤醒后，处理并清除 todo 中的任务（BINDER_WORK_TRANSACTION），返回命令 BR_TRANSACTION。处理完成调用方指定的工作后，反馈命令 BC_FREE_BUFFER 和 BC_REPLY，前者用来释放上一阶段驱动分配的内存，后者开始反馈，往线程 todo 中添加一个类型为 BINDER_WORK_TRANSACTION_COMPLETE 的任务，同时清理调用方线程栈顶的事务，并往调用方线程 todo 中添加一个类型为 BINDER_WORK_TRANSACTION 的任务，然后唤醒调用方线程。目标线程接着开始 read 流程，处理并清除线程中的 todo 任务（BINDER_WORK_TRANSACTION_COMPLETE），返回命令 BR_TRANSACTION_COMPLETE，然后重新进入 read，阻塞，等待再次被唤醒。
 
-调用方线程被唤醒后，处理并清除todo中的任务（BINDER_WORK_TRANSACTION），返回命令BR_REPLY，接着一路返回。
+调用方线程被唤醒后，处理并清除 todo 中的任务（BINDER_WORK_TRANSACTION），返回命令 BR_REPLY，接着一路返回。
 
-### 2.6.2 关于Binder
+### 2.6.2 关于 Binder
 
-在Java中，IBinder是基础接口，Binder和BinderProxy都继承IBinder。服务提供着需要继承Binder，例如ActivityManagerService。而服务调用者则包含一个BinderProxy对象，例如ActivityManagerProxy。服务提供者和服务调用者都需要实现业务接口，二者皆实现IActivityManager。简化的代码如下：
+在 Java 中，IBinder 是基础接口，Binder 和 BinderProxy 都继承 IBinder。服务提供着需要继承 Binder，例如 ActivityManagerService。而服务调用者则包含一个 BinderProxy 对象，例如 ActivityManagerProxy。服务提供者和服务调用者都需要实现业务接口，二者皆实现 IActivityManager。简化的代码如下：
 ```java
 interface IInterface {
   public IBinder asBinder();
@@ -3169,7 +3169,7 @@ interface IBinder {
 }
 class BinderProxy implements IBinder {
   public boolean transact() {
-    // 最终发起binder系统调用
+    // 最终发起 binder 系统调用
   }
   public IInterface queryLocalInterface(String descriptor) {
     return null;
@@ -3237,7 +3237,7 @@ Binder Driver
 ActivityManagerService.onTransact
 ActivityManagerService.startActivity
 ```
-将IBinder转为业务类型：
+将 IBinder 转为业务类型：
 ```java
 static public IActivityManager asInterface(IBinder obj) {
   if (obj == null) {
@@ -3253,10 +3253,10 @@ static public IActivityManager asInterface(IBinder obj) {
 }
 ```
 
-# 3 startActivity流程
-这里只分析与Binder调用相关的流程，分析到AcitivityManagerService就可以了，忽略其他细节。
+# 3 startActivity 流程
+这里只分析与 Binder 调用相关的流程，分析到 AcitivityManagerService 就可以了，忽略其他细节。
 
-通常调用startActivity最终会调用Instrumentation#execStartActivity，就从这里开始看。
+通常调用 startActivity 最终会调用 Instrumentation#execStartActivity，就从这里开始看。
 
 ## 3.1 Instrumentation#execStartActivity
 ```java
@@ -3269,7 +3269,7 @@ public ActivityResult execStartActivity(
     try {
         intent.migrateExtraStreamToClipData();
         intent.prepareToLeaveProcess();
-        // 见3.1.1
+        // 见 3.1.1
         int result = ActivityManagerNative.getDefault()
             .startActivity(whoThread, who.getBasePackageName(), intent,
                     intent.resolveTypeIfNeeded(who.getContentResolver()),
@@ -3282,22 +3282,22 @@ public ActivityResult execStartActivity(
 }
 ```
 
-## 3.2 获得ActivityManager服务
+## 3.2 获得 ActivityManager 服务
 ```java
 // ActivityManagerNative.java
 static public IActivityManager getDefault() {
-    // 单例模式，第一次调用会指向下面的gDefault.create方法
+    // 单例模式，第一次调用会指向下面的 gDefault.create 方法
     return gDefault.get();
 }
 
 private static final Singleton<IActivityManager> gDefault = new Singleton<IActivityManager>() {
     protected IActivityManager create() {
-        // 见3.2.1
+        // 见 3.2.1
         IBinder b = ServiceManager.getService("activity");
         if (false) {
             Log.v("ActivityManager", "default service binder = " + b);
         }
-        // 见3.2.4
+        // 见 3.2.4
         IActivityManager am = asInterface(b);
         if (false) {
             Log.v("ActivityManager", "default service = " + am);
@@ -3307,7 +3307,7 @@ private static final Singleton<IActivityManager> gDefault = new Singleton<IActiv
 };
 ```
 
-最终返回的是ActivityManagerProxy，传入的构造参数为BinderProxy，其mObject字段指向native对象BpBinder，其handle最终指向ActivityManagerService。
+最终返回的是 ActivityManagerProxy，传入的构造参数为 BinderProxy，其 mObject 字段指向 native 对象 BpBinder，其 handle 最终指向 ActivityManagerService。
 
 ### 3.2.1 ServiceManager#getService
 ```java
@@ -3319,7 +3319,7 @@ public static IBinder getService(String name) {
         if (service != null) {
             return service;
         } else {
-            // 获取的是ServiceManagerProxy
+            // 获取的是 ServiceManagerProxy
             return getIServiceManager().getService(name);
         }
     } catch (RemoteException e) {
@@ -3334,9 +3334,9 @@ public IBinder getService(String name) throws RemoteException {
     Parcel reply = Parcel.obtain();
     data.writeInterfaceToken(IServiceManager.descriptor);
     data.writeString(name);
-    // 见3.2.2
+    // 见 3.2.2
     mRemote.transact(GET_SERVICE_TRANSACTION, data, reply, 0);
-    // 见3.2.3
+    // 见 3.2.3
     IBinder binder = reply.readStrongBinder();
     reply.recycle();
     data.recycle();
@@ -3345,7 +3345,7 @@ public IBinder getService(String name) throws RemoteException {
 ```
 
 ### 3.2.2 svcmgr_handler
-忽略中间的调用过程，直接看下service_manager查出后的执行过程。
+忽略中间的调用过程，直接看下 service_manager 查出后的执行过程。
 ```c++
 //service_manager.c
 int svcmgr_handler(struct binder_state *bs,
@@ -3367,7 +3367,7 @@ int svcmgr_handler(struct binder_state *bs,
         if (s == NULL) {
             return -1;
         }
-        // 根据"activity"查出handle
+        // 根据"activity"查出 handle
         handle = do_find_service(bs, s, len, txn->sender_euid, txn->sender_pid);
         if (!handle)
             break;
@@ -3398,13 +3398,13 @@ void bio_put_ref(struct binder_io *bio, uint32_t handle)
     obj->cookie = 0;
 }
 ```
-这里往reply中写入了两个数据，一个是flat_binder_object，其type为BINDER_TYPE_HANDLE，其handle则是驱动为ActivityManagerService的binder_node所创建的一个引用binder_ref的句柄。Service Manager反馈时，驱动会根据handle在Service Manager的proc下查出binder_ref，通过binder_ref->node取出ActivityManagerService的binder_node，然后在请求线程所在进程的proc下创建一个新的binder_ref，然后返回这个新创建的binder_ref的handle字段。
+这里往 reply 中写入了两个数据，一个是 flat_binder_object，其 type 为 BINDER_TYPE_HANDLE，其 handle 则是驱动为 ActivityManagerService 的 binder_node 所创建的一个引用 binder_ref 的句柄。Service Manager 反馈时，驱动会根据 handle 在 Service Manager 的 proc 下查出 binder_ref，通过 binder_ref->node 取出 ActivityManagerService 的 binder_node，然后在请求线程所在进程的 proc 下创建一个新的 binder_ref，然后返回这个新创建的 binder_ref 的 handle 字段。
 
-也就是说，一个服务对象的binder_node只有一个，位于创建服务的进程的proc下，而其他所有进程如果想引用该服务都会在其对应进程的proc下创建自己的binder_ref。
+也就是说，一个服务对象的 binder_node 只有一个，位于创建服务的进程的 proc 下，而其他所有进程如果想引用该服务都会在其对应进程的 proc 下创建自己的 binder_ref。
 
 ### 3.2.3 readStrongBinder
 
-调用完成后会执行reply.readStrongBinder()，该方法是一个native方法android_os_Parcel_readStrongBinder。
+调用完成后会执行 reply.readStrongBinder()，该方法是一个 native 方法 android_os_Parcel_readStrongBinder。
 
 ```c++
 // android_os_Parcel.cpp
@@ -3417,12 +3417,12 @@ static jobject android_os_Parcel_readStrongBinder(JNIEnv* env, jclass clazz, jlo
     return NULL;
 }
 ```
-parcel->readStrongBinder会创建一个BpBinder对象，传入handle作为构造参数。javaObjectForIBinder会创建一个android.os.BinderProxy的Java对象，并将BpBinder对象的地址赋给BinderProxy的mObject字段。
+parcel->readStrongBinder 会创建一个 BpBinder 对象，传入 handle 作为构造参数。javaObjectForIBinder 会创建一个 android.os.BinderProxy 的 Java 对象，并将 BpBinder 对象的地址赋给 BinderProxy 的 mObject 字段。
 
 ### 3.2.4 IActivityManager#asInterface
 ```java
 // ActivityManagerNative.java
-// obj = BinderProxy对象
+// obj = BinderProxy 对象
 static public IActivityManager asInterface(IBinder obj) {
     if (obj == null) {
         return null;
@@ -3432,7 +3432,7 @@ static public IActivityManager asInterface(IBinder obj) {
     if (in != null) {
         return in;
     }
-    // 最终返回ActivityManagerProxy
+    // 最终返回 ActivityManagerProxy
     return new ActivityManagerProxy(obj);
 }
 ```
@@ -3454,16 +3454,16 @@ public int startActivity(IApplicationThread caller, String callingPackage, Inten
     return result;
 }
 ```
-省略掉中间过程，直接看看binder驱动如何操作。驱动从取出handle后，在当前进程的proc下查找binder_ref，binder_ref->node便是target_node，其中的cookie字段即是BBinder的地址。
+省略掉中间过程，直接看看 binder 驱动如何操作。驱动从取出 handle 后，在当前进程的 proc 下查找 binder_ref，binder_ref->node 便是 target_node，其中的 cookie 字段即是 BBinder 的地址。
 
-回到IPCThreadState.cpp，在执行BR_TRANSACTION时会根据cookie找到BBinder对象，实际上是JavaBBinder对象，其mObject字段指向ActivityManagerService的Java对象。
+回到 IPCThreadState.cpp，在执行 BR_TRANSACTION 时会根据 cookie 找到 BBinder 对象，实际上是 JavaBBinder 对象，其 mObject 字段指向 ActivityManagerService 的 Java 对象。
 ```c++
 if (tr.target.ptr) {
     // We only have a weak reference on the target object, so we must first try to
     // safely acquire a strong reference before doing anything else with it.
     if (reinterpret_cast<RefBase::weakref_type*>(
             tr.target.ptr)->attemptIncStrong(this)) {
-        // 见3.3.1
+        // 见 3.3.1
         error = reinterpret_cast<BBinder*>(tr.cookie)->transact(tr.code, buffer,
                 &reply, tr.flags);
         reinterpret_cast<BBinder*>(tr.cookie)->decStrong(this);
@@ -3487,7 +3487,7 @@ status_t BBinder::transact(
             reply->writeInt32(pingBinder());
             break;
         default:
-            // JavaBBinder继承BBinder，见3.3.2
+            // JavaBBinder 继承 BBinder，见 3.3.2
             err = onTransact(code, data, reply, flags);
             break;
     }
@@ -3511,7 +3511,7 @@ virtual status_t onTransact(
     IPCThreadState* thread_state = IPCThreadState::self();
     const int32_t strict_policy_before = thread_state->getStrictModePolicy();
 
-    // 执行Java对象的execTransact方法，见3.3.3
+    // 执行 Java 对象的 execTransact 方法，见 3.3.3
     jboolean res = env->CallBooleanMethod(mObject, gBinderOffsets.mExecTransact,
         code, reinterpret_cast<jlong>(&data), reinterpret_cast<jlong>(reply), flags);
     ...
@@ -3538,4 +3538,4 @@ private boolean execTransact(int code, long dataObj, long replyObj,
     return res;
 }
 ```
-最终调用ActivityManagerSerivce的onTransact方法。
+最终调用 ActivityManagerSerivce 的 onTransact 方法。
