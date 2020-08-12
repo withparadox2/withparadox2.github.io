@@ -2956,9 +2956,9 @@ static void binder_pop_transaction(struct binder_thread *target_thread,
 还原发起添加服务请求线程的事务栈。
 
 ## 2.5 添加服务返回
-添加服务的线程在2.2.8中阻塞，在被ServiceManager唤醒后将继续往下执行。
+添加服务的线程在2.2.8中阻塞，在被ServiceManager唤醒后将继续往下执行。此时，线程事务栈被清空，线程todo列表中有一个类型为BINDER_WORK_TRANSACTION的任务。
 ```c++
-
+// kernel/drivers/android/binder.c
 static int binder_thread_read(struct binder_proc *proc,
             struct binder_thread *thread,
             void  __user *buffer, int size,
@@ -3127,6 +3127,34 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
 }
 ```
 将返回的数据0写入到reply中，进入finish，然后层层返回，添加Service流程执行结束。
+
+我们知道，Service Manger在处理完任务反馈时，先执行了一个指令BC_FREE_BUFFER来释放分配的内存，由于这里是直接返回，不再进行系统调用，那么问题来了，Service Manager反馈时内核分配的内存该如何清理呢？
+
+在调用ipcSetDataReference时，同时传入了一个清理方法freeBuffer，该方法最终会在Java端调用Parcel.recycle()时执行，下面看看它的实现：
+```c++
+void IPCThreadState::freeBuffer(Parcel* parcel, const uint8_t* data,
+                                size_t /*dataSize*/,
+                                const binder_size_t* /*objects*/,
+                                size_t /*objectsSize*/, void* /*cookie*/)
+{
+    ALOG_ASSERT(data != NULL, "Called with NULL data");
+    if (parcel != NULL) parcel->closeFileDescriptors();
+    IPCThreadState* state = self();
+    state->mOut.writeInt32(BC_FREE_BUFFER);
+    state->mOut.writePointer((uintptr_t)data);
+}
+```
+这里往mOut中添加了一个BC_FREE_BUFFER指令，只能等待下一次该线程发起iotcl时通知驱动来清理了。
+
+## 2.6 总结
+
+现在来看一下调用流程：
+
+调用方发起BC_TRANSACTION，将事务放到线程事务栈栈顶，并在线程todo中添加一个类型为BINDER_WORK_TRANSACTION_COMPLETE的任务，同时在目标线程（没有指定线程，便唤醒proc->wait，也即主线程）todo中添加一个类型为BINDER_WORK_TRANSACTION的任务，并唤醒目标线程。调用方然后开始read流程，处理并清除线程中的todo任务（BINDER_WORK_TRANSACTION_COMPLETE），返回命令BR_TRANSACTION_COMPLETE，然后重新进入read，阻塞，等待唤醒。
+
+目标线程被唤醒后，处理并清除todo中的任务（BINDER_WORK_TRANSACTION），返回命令BR_TRANSACTION。处理完成调用方指定的工作后，反馈命令BC_FREE_BUFFER和BC_REPLY，前者用来释放上一阶段驱动分配的内存，后者开始反馈，往线程todo中添加一个类型为BINDER_WORK_TRANSACTION_COMPLETE的任务，同时清理调用方线程栈顶的事务，并往调用方线程todo中添加一个类型为BINDER_WORK_TRANSACTION的任务，然后唤醒调用方线程。目标线程接着开始read流程，处理并清除线程中的todo任务（BINDER_WORK_TRANSACTION_COMPLETE），返回命令BR_TRANSACTION_COMPLETE，然后重新进入read，阻塞，等待再次被唤醒。
+
+调用方线程被唤醒后，处理并清除todo中的任务（BINDER_WORK_TRANSACTION），返回命令BR_REPLY，接着一路返回。
 
 在Java中，IBinder是基础接口，Binder和BinderProxy都继承IBinder。服务提供着需要继承Binder，例如ActivityManagerService。而服务调用者则包含一个BinderProxy对象，例如ActivityManagerProxy。服务提供者和服务调用者都需要实现业务接口，二者皆实现IActivityManager。
 
