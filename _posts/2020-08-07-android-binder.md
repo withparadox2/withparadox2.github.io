@@ -2147,8 +2147,196 @@ static void binder_transaction(struct binder_proc *proc,
 唤醒目标线程后，继续返回到 2.2.4 binder_ioctl，由于 bwr.read_size 不为 0，进入 2.2.7。ServiceManager 线程在被唤醒后的执行见 2.3。
 
 #### 2.2.6.1 binder_alloc_buf
-#### 2.2.6.2 binder_get_ref_for_node
+内核为传入的数据分配必要的内存，该段内存和目标进程会进行共享，从而省去一次拷贝。
+```c++
+// proc = Service Manager 所在进程的 binder_proc
+// data_size = 实际数据的大小
+// offsets_size = binder 对象的位置数组大小
+// is_async = false
+static struct binder_buffer *binder_alloc_buf(struct binder_proc *proc,
+                size_t data_size,
+                size_t offsets_size, int is_async)
+{
+  struct rb_node *n = proc->free_buffers.rb_node;
+  struct binder_buffer *buffer;
+  size_t buffer_size;
+  struct rb_node *best_fit = NULL;
+  void *has_page_addr;
+  void *end_page_addr;
+  size_t size;
 
+  if (proc->vma == NULL) {
+    printk(KERN_ERR "binder: %d: binder_alloc_buf, no vma\n",
+           proc->pid);
+    return NULL;
+  }
+
+  size = ALIGN(data_size, sizeof(void *)) +
+    ALIGN(offsets_size, sizeof(void *));
+
+  if (size < data_size || size < offsets_size) {
+    binder_user_error("binder: %d: got transaction with invalid "
+      "size %zd-%zd\n", proc->pid, data_size, offsets_size);
+    return NULL;
+  }
+
+  if (is_async &&
+      proc->free_async_space < size + sizeof(struct binder_buffer)) {
+    binder_debug(BINDER_DEBUG_BUFFER_ALLOC,
+           "binder: %d: binder_alloc_buf size %zd"
+           "failed, no async space left\n", proc->pid, size);
+    return NULL;
+  }
+
+  while (n) {
+    buffer = rb_entry(n, struct binder_buffer, rb_node);
+    BUG_ON(!buffer->free);
+    buffer_size = binder_buffer_size(proc, buffer);
+
+    if (size < buffer_size) {
+      best_fit = n;
+      n = n->rb_left;
+    } else if (size > buffer_size)
+      n = n->rb_right;
+    else {
+      best_fit = n;
+      break;
+    }
+  }
+  if (best_fit == NULL) {
+    printk(KERN_ERR "binder: %d: binder_alloc_buf size %zd failed, "
+           "no address space\n", proc->pid, size);
+    return NULL;
+  }
+
+  // 如果上面查找过程 size != buffer_size，则会一路查下去，最终 n 为 NULL。
+  // 此时，我们将从 best_fit 指向的 buffer 中去分配内存
+  if (n == NULL) {
+    buffer = rb_entry(best_fit, struct binder_buffer, rb_node);
+    buffer_size = binder_buffer_size(proc, buffer);
+  }
+
+  binder_debug(BINDER_DEBUG_BUFFER_ALLOC,
+         "binder: %d: binder_alloc_buf size %zd got buff"
+         "er %p size %zd\n", proc->pid, size, buffer, buffer_size);
+
+  has_page_addr =
+    (void *)(((uintptr_t)buffer->data + buffer_size) & PAGE_MASK);
+  if (n == NULL) {
+    // 这里主要是检测这段 buffer 是否还可以拆成两半。一段 free buffer 的大小
+    // 为 struct binder_buffer 的大小加上实际可用的大小（最小为 4 字节）。因此，
+    // 如果够拆分，那么待会要分配的物理内存大小就得加上 struct binder_buffer 
+    // 的大小，用来存储下一段 free buffer 的信息。
+    if (size + sizeof(struct binder_buffer) + 4 >= buffer_size)
+      buffer_size = size; /* no room for other buffers */
+    else
+      buffer_size = size + sizeof(struct binder_buffer);
+  }
+  end_page_addr =
+    (void *)PAGE_ALIGN((uintptr_t)buffer->data + buffer_size);
+  if (end_page_addr > has_page_addr)
+    // ？？？
+    end_page_addr = has_page_addr;
+  // 分配物理内存
+  if (binder_update_page_range(proc, 1,
+      (void *)PAGE_ALIGN((uintptr_t)buffer->data), end_page_addr, NULL))
+    return NULL;
+
+  rb_erase(best_fit, &proc->free_buffers);
+  buffer->free = 0;
+  binder_insert_allocated_buffer(proc, buffer);
+  if (buffer_size != size) {
+    struct binder_buffer *new_buffer = (void *)buffer->data + size;
+    list_add(&new_buffer->entry, &buffer->entry);
+    new_buffer->free = 1;
+    binder_insert_free_buffer(proc, new_buffer);
+  }
+  binder_debug(BINDER_DEBUG_BUFFER_ALLOC,
+         "binder: %d: binder_alloc_buf size %zd got "
+         "%p\n", proc->pid, size, buffer);
+  buffer->data_size = data_size;
+  buffer->offsets_size = offsets_size;
+  buffer->async_transaction = is_async;
+  if (is_async) {
+    proc->free_async_space -= size + sizeof(struct binder_buffer);
+    binder_debug(BINDER_DEBUG_BUFFER_ALLOC_ASYNC,
+           "binder: %d: binder_alloc_buf size %zd "
+           "async free %zd\n", proc->pid, size,
+           proc->free_async_space);
+  }
+
+  return buffer;
+}
+```
+#### 2.2.6.2 binder_get_ref_for_node
+```c++
+static struct binder_ref *binder_get_ref_for_node(struct binder_proc *proc,
+              struct binder_node *node)
+{
+  struct rb_node *n;
+  struct rb_node **p = &proc->refs_by_node.rb_node;
+  struct rb_node *parent = NULL;
+  struct binder_ref *ref, *new_ref;
+
+  while (*p) {
+    parent = *p;
+    ref = rb_entry(parent, struct binder_ref, rb_node_node);
+
+    if (node < ref->node)
+      p = &(*p)->rb_left;
+    else if (node > ref->node)
+      p = &(*p)->rb_right;
+    else
+      return ref;
+  }
+  new_ref = kzalloc(sizeof(*ref), GFP_KERNEL);
+  if (new_ref == NULL)
+    return NULL;
+  binder_stats_created(BINDER_STAT_REF);
+  new_ref->debug_id = ++binder_last_id;
+  new_ref->proc = proc;
+  new_ref->node = node;
+  rb_link_node(&new_ref->rb_node_node, parent, p);
+  rb_insert_color(&new_ref->rb_node_node, &proc->refs_by_node);
+
+  new_ref->desc = (node == binder_context_mgr_node) ? 0 : 1;
+  for (n = rb_first(&proc->refs_by_desc); n != NULL; n = rb_next(n)) {
+    ref = rb_entry(n, struct binder_ref, rb_node_desc);
+    if (ref->desc > new_ref->desc)
+      break;
+    new_ref->desc = ref->desc + 1;
+  }
+
+  p = &proc->refs_by_desc.rb_node;
+  while (*p) {
+    parent = *p;
+    ref = rb_entry(parent, struct binder_ref, rb_node_desc);
+
+    if (new_ref->desc < ref->desc)
+      p = &(*p)->rb_left;
+    else if (new_ref->desc > ref->desc)
+      p = &(*p)->rb_right;
+    else
+      BUG();
+  }
+  rb_link_node(&new_ref->rb_node_desc, parent, p);
+  rb_insert_color(&new_ref->rb_node_desc, &proc->refs_by_desc);
+  if (node) {
+    hlist_add_head(&new_ref->node_entry, &node->refs);
+
+    binder_debug(BINDER_DEBUG_INTERNAL_REFS,
+           "binder: %d new ref %d desc %d for "
+           "node %d\n", proc->pid, new_ref->debug_id,
+           new_ref->desc, node->debug_id);
+  } else {
+    binder_debug(BINDER_DEBUG_INTERNAL_REFS,
+           "binder: %d new ref %d desc %d for "
+           "dead node\n", proc->pid, new_ref->debug_id,
+            new_ref->desc);
+  }
+  return new_ref;
+}
+```
 ### 2.2.7 binder_thread_read
 
 ```c++
